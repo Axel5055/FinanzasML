@@ -1,0 +1,105 @@
+@import 'tailwindcss';
+@import '../../vendor/livewire/flux/dist/flux.css';
+@import '../../vendor/power-components/livewire-powergrid/resources/css/tailwind4.css';
+
+@source '../views';
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';
+@source '../../vendor/livewire/flux/stubs/**/*.blade.php';
+@source '../../app/Livewire/*Table.php';
+@source '../../app/Livewire/**/*Table.php';
+@source '../../vendor/power-components/livewire-powergrid/src/Themes/Tailwind.php';
+@source '../../vendor/power-components/livewire-powergrid/resources/views/**/*.php';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /*
+     * Paleta cálida heredada del rediseño de "Registrar cuenta" del proyecto
+     * anterior (paper/surface/ink/accent). Se remapea sobre la escala zinc de
+     * Tailwind en vez de crear nombres nuevos, para que todos los componentes
+     * de Flux (card, table, sidebar, input...) hereden el look automáticamente.
+     */
+    --color-zinc-50: #f8f9f7;
+    --color-zinc-100: #f1f3ef;
+    --color-zinc-200: #e9ece6;
+    --color-zinc-300: #dde3d8;
+    --color-zinc-400: #b7c0b2;
+    --color-zinc-500: #8a968e;
+    --color-zinc-600: #5c6961;
+    --color-zinc-700: #3e4740;
+    --color-zinc-800: #2a312b;
+    --color-zinc-900: #1c211d;
+    --color-zinc-950: #10130f;
+
+    --color-accent: #c1721e;
+    --color-accent-content: #c1721e;
+    --color-accent-foreground: #fff8ee;
+    --color-accent-soft: #f3e3ce;
+
+    /* Cifras financieras: faltante (negative) / sobrante o pagado (positive). */
+    --color-positive: #2f7a4f;
+    --color-positive-soft: #e1efe5;
+    --color-negative: #b23b2e;
+    --color-negative-soft: #f6e4e1;
+
+    /* PowerGrid usa su propia escala pg-primary-* para bordes/texto/fondos de
+     * su UI (buscador, cabecera, paginación); la mapeamos sobre la misma
+     * paleta cálida en vez de dejar el gris neutro por defecto. */
+    --color-pg-primary-50: #f8f9f7;
+    --color-pg-primary-100: #f1f3ef;
+    --color-pg-primary-200: #e9ece6;
+    --color-pg-primary-300: #dde3d8;
+    --color-pg-primary-400: #b7c0b2;
+    --color-pg-primary-500: #8a968e;
+    --color-pg-primary-600: #5c6961;
+    --color-pg-primary-700: #3e4740;
+    --color-pg-primary-800: #2a312b;
+    --color-pg-primary-900: #1c211d;
+    --color-pg-primary-950: #10130f;
+}
+
+@layer theme {
+    .dark {
+        --color-accent: #d98b3f;
+        --color-accent-content: #e2a165;
+        --color-accent-foreground: #1c211d;
+        --color-accent-soft: color-mix(in oklab, #d98b3f, transparent 85%);
+
+        --color-positive: #4ade80;
+        --color-positive-soft: color-mix(in oklab, #2f7a4f, transparent 80%);
+        --color-negative: #f87171;
+        --color-negative-soft: color-mix(in oklab, #b23b2e, transparent 80%);
+    }
+}
+
+@layer base {
+
+    *,
+    ::after,
+    ::before,
+    ::backdrop,
+    ::file-selector-button {
+        border-color: var(--color-gray-200, currentColor);
+    }
+}
+
+[data-flux-field]:not(ui-radio, ui-checkbox) {
+    @apply grid gap-2;
+}
+
+[data-flux-label] {
+    @apply  !mb-0 !leading-tight;
+}
+
+input:focus[data-flux-control],
+textarea:focus[data-flux-control],
+select:focus[data-flux-control] {
+    @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
+}
+
+/* \[:where(&)\]:size-4 {
+    @apply size-4;
+} */
