@@ -10,6 +10,8 @@ use Livewire\Component;
 new #[Title('Productos')] class extends Component {
     public string $tab = 'productos';
 
+    public bool $canManageCatalogo = false;
+
     public bool $openCreate = false;
 
     public bool $openEdit = false;
@@ -22,6 +24,9 @@ new #[Title('Productos')] class extends Component {
 
     public function mount(): void
     {
+        $this->canManageCatalogo = auth()->user()->can('admin.productos.index');
+        $this->tab = $this->canManageCatalogo ? 'productos' : 'precios';
+
         $this->cargarPrecios();
     }
 
@@ -45,6 +50,15 @@ new #[Title('Productos')] class extends Component {
         return Categoria::orderBy('name')->get();
     }
 
+    public function cambiarTab(string $tab): void
+    {
+        if ($tab === 'productos' && ! $this->canManageCatalogo) {
+            return;
+        }
+
+        $this->tab = $tab;
+    }
+
     public function guardarPrecios(): void
     {
         collect($this->precios)->each(function ($precio) {
@@ -59,12 +73,16 @@ new #[Title('Productos')] class extends Component {
 
     public function abrirCrear(): void
     {
+        abort_unless($this->canManageCatalogo, 403);
+
         $this->form = ['name' => '', 'categoria_id' => ''];
         $this->openCreate = true;
     }
 
     public function crear(): void
     {
+        abort_unless($this->canManageCatalogo, 403);
+
         $this->validate([
             'form.name' => ['required', 'string'],
             'form.categoria_id' => ['required', 'exists:categorias,id'],
@@ -80,6 +98,8 @@ new #[Title('Productos')] class extends Component {
 
     public function abrirEditar(int $productoId): void
     {
+        abort_unless($this->canManageCatalogo, 403);
+
         $producto = Producto::findOrFail($productoId);
 
         $this->editId = $producto->id;
@@ -89,6 +109,8 @@ new #[Title('Productos')] class extends Component {
 
     public function actualizar(): void
     {
+        abort_unless($this->canManageCatalogo, 403);
+
         $this->validate([
             'form.name' => ['required', 'string'],
             'form.categoria_id' => ['required', 'exists:categorias,id'],
@@ -110,6 +132,8 @@ new #[Title('Productos')] class extends Component {
 
     public function eliminar(int $productoId): void
     {
+        abort_unless($this->canManageCatalogo, 403);
+
         try {
             $producto = Producto::find($productoId);
 
@@ -148,17 +172,19 @@ new #[Title('Productos')] class extends Component {
                 <flux:subheading>Catálogo de productos y precios maestros.</flux:subheading>
             </div>
         </div>
-        @if ($tab === 'productos')
+        @if ($canManageCatalogo && $tab === 'productos')
             <flux:button variant="primary" icon="plus" wire:click="abrirCrear">Agregar producto</flux:button>
         @endif
     </div>
 
-    <div class="flex gap-2">
-        <flux:button size="sm" :variant="$tab === 'productos' ? 'primary' : 'ghost'" wire:click="$set('tab', 'productos')">Productos</flux:button>
-        <flux:button size="sm" :variant="$tab === 'precios' ? 'primary' : 'ghost'" wire:click="$set('tab', 'precios')">Precios</flux:button>
-    </div>
+    @if ($canManageCatalogo)
+        <div class="flex gap-2">
+            <flux:button size="sm" :variant="$tab === 'productos' ? 'primary' : 'ghost'" wire:click="cambiarTab('productos')">Productos</flux:button>
+            <flux:button size="sm" :variant="$tab === 'precios' ? 'primary' : 'ghost'" wire:click="cambiarTab('precios')">Precios</flux:button>
+        </div>
+    @endif
 
-    @if ($tab === 'productos')
+    @if ($canManageCatalogo && $tab === 'productos')
         <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
             <div class="max-h-[28rem] overflow-y-auto overflow-x-auto">
                 <table class="w-full table-fixed text-[13.5px] text-left min-w-[640px]">

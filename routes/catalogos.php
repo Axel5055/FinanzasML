@@ -8,7 +8,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('admin.sucursales.index');
 
     Route::livewire('admin/productos', 'pages::productos.index')
-        ->middleware('can:admin.productos.index')
+        ->middleware('role_or_permission:Capturista|admin.productos.index')
         ->name('admin.productos.index');
 
     Route::livewire('admin/users', 'pages::usuarios.index')

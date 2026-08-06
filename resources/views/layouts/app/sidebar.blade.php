@@ -20,6 +20,9 @@
                         <flux:sidebar.item icon="clipboard-document-list" :href="route('capturista.registrar.index')" :current="request()->routeIs('capturista.registrar.index')" wire:navigate>
                             {{ __('Registrar Cuenta') }}
                         </flux:sidebar.item>
+                        <flux:sidebar.item icon="cube" :href="route('admin.productos.index')" :current="request()->routeIs('admin.productos.*')" wire:navigate>
+                            {{ __('Precios de productos') }}
+                        </flux:sidebar.item>
                     @endif
 
                     @if (auth()->user()->hasRole('Admin'))
