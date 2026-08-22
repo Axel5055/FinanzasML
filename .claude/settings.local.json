@@ -6,7 +6,18 @@
       "Bash(vendor/bin/pint --dirty --format agent)",
       "mcp__laravel-boost__database-query",
       "Bash(php -r \"var_dump\\(mb_detect_encoding\\(basename\\(glob\\('resources/views/pages/*dashboard*'\\)[0]\\)\\)\\);\")",
-      "Bash(php -r '$f = glob\\('\\\\''resources/views/pages/*dashboard*'\\\\''\\)[0]; echo bin2hex\\(basename\\($f\\)\\), PHP_EOL, basename\\($f\\), PHP_EOL;')"
+      "Bash(php -r '$f = glob\\('\\\\''resources/views/pages/*dashboard*'\\\\''\\)[0]; echo bin2hex\\(basename\\($f\\)\\), PHP_EOL, basename\\($f\\), PHP_EOL;')",
+      "Bash(git fetch *)",
+      "Bash(git status *)",
+      "Bash(git check-ignore *)",
+      "Bash(git pull *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh pr create --base main --head feature/capturista-precios-productos --title 'Permitir a Capturista editar precios de productos' --body ' *)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "PowerShell(gh --version 2>&1)"
     ]
   }
 }
