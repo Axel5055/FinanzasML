@@ -30,6 +30,8 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
     public $efectivoEntregado;
 
+    public $tarjeta;
+
     // Salida (add/edit)
     public bool $openSalida = false;
 
@@ -118,10 +120,10 @@ new #[Title('Detalle de cuenta')] class extends Component {
         $totalSalidas = Salida::where('cuenta_id', $this->cuenta->id)->sum('total');
         $totalGastos = Gasto::where('cuenta_id', $this->cuenta->id)->sum('precio');
         $totalMermas = Merma::where('cuenta_id', $this->cuenta->id)->sum('precio');
-        $efectivoEntregado = $this->cuenta->efectivo_entregado;
+        $totalCapturado = (float) $this->cuenta->efectivo_entregado + (float) $this->cuenta->tarjeta;
 
         $totalVenta = abs($totalExistencia + $totalEntrada) - $totalSobrante - $totalSalidas - $totalGastos - $totalMermas;
-        $diferencia = $totalVenta - $efectivoEntregado;
+        $diferencia = $totalVenta - $totalCapturado;
 
         $this->cuenta->update([
             'total_venta' => $totalVenta,
@@ -146,7 +148,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
             'efectivo_pollo' => 0,
             'efectivo_marinado' => 0,
             'efectivo_entregado' => 0,
-            'transferencia' => 0,
+            'tarjeta' => 0,
             'efectivo_total' => 0,
             'diferencia' => 0,
             'sobrante' => 0,
@@ -167,20 +169,29 @@ new #[Title('Detalle de cuenta')] class extends Component {
         }
     }
 
-    // ---- Efectivo entregado ----
+    // ---- Efectivo entregado / tarjeta ----
+
+    public function abrirEfectivo(): void
+    {
+        $this->efectivoEntregado = $this->cuenta->efectivo_entregado;
+        $this->tarjeta = $this->cuenta->tarjeta;
+        $this->openEfectivo = true;
+    }
 
     public function guardarEfectivo(): void
     {
         try {
             DB::transaction(function () {
                 $totalVenta = Cuenta::find($this->cuenta->id)->total_venta;
+                $totalCapturado = (float) $this->efectivoEntregado + (float) $this->tarjeta;
                 $this->cuenta->update([
                     'efectivo_entregado' => $this->efectivoEntregado,
-                    'diferencia' => $totalVenta - $this->efectivoEntregado,
+                    'tarjeta' => $this->tarjeta,
+                    'diferencia' => $totalVenta - $totalCapturado,
                 ]);
             });
-            $this->reset(['openEfectivo', 'efectivoEntregado']);
-            Flux::toast(variant: 'success', text: 'Efectivo actualizado correctamente.');
+            $this->reset(['openEfectivo', 'efectivoEntregado', 'tarjeta']);
+            Flux::toast(variant: 'success', text: 'Efectivo y tarjeta actualizados correctamente.');
         } catch (\Throwable $e) {
             Flux::toast(variant: 'danger', text: 'Error al cambiar efectivo.');
         }
@@ -596,7 +607,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             <div class="flex gap-2 flex-wrap">
                 <flux:button variant="ghost" wire:click="$set('openStatus', true)">Cambiar status</flux:button>
-                <flux:button variant="ghost" wire:click="$set('openEfectivo', true)">Actualizar efectivo</flux:button>
+                <flux:button variant="ghost" wire:click="abrirEfectivo">Actualizar efectivo</flux:button>
                 <flux:button icon="pencil-square" :href="route('admin.registrar.index', ['cuenta' => $cuenta->id])" wire:navigate>Editar cuenta</flux:button>
                 <flux:button icon="arrow-down-tray" :href="route('admin.cuentas.pdf', $cuenta)" target="_blank">PDF</flux:button>
                 <flux:button
@@ -669,8 +680,8 @@ new #[Title('Detalle de cuenta')] class extends Component {
             </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 min-w-0">
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="$set('openEfectivo', true)">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 min-w-0">
+            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="abrirEfectivo">
                 <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Pollo</div>
                 <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->efectivo_pollo, 2) }}</div>
             </div>
@@ -678,9 +689,13 @@ new #[Title('Detalle de cuenta')] class extends Component {
                 <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Marinado</div>
                 <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->efectivo_marinado, 2) }}</div>
             </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5">
+            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="abrirEfectivo">
                 <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Efectivo entregado</div>
                 <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->efectivo_entregado, 2) }}</div>
+            </div>
+            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="abrirEfectivo">
+                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Tarjeta</div>
+                <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->tarjeta, 2) }}</div>
             </div>
             <div @class([
                 'rounded-lg px-4 py-3.5 border',
@@ -966,8 +981,9 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {{-- Modal Efectivo --}}
     <flux:modal wire:model="openEfectivo" name="efectivo" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">Efectivo entregado</flux:heading>
-            <flux:input type="number" step="0.001" wire:model="efectivoEntregado" label="Monto" />
+            <flux:heading size="lg">Efectivo y tarjeta</flux:heading>
+            <flux:input type="number" step="0.001" icon="currency-dollar" wire:model="efectivoEntregado" label="Efectivo entregado" />
+            <flux:input type="number" step="0.001" icon="credit-card" wire:model="tarjeta" label="Pago con tarjeta" />
             <div class="flex justify-end gap-2">
                 <flux:button variant="ghost" wire:click="$set('openEfectivo', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarEfectivo">Guardar</flux:button>
@@ -987,6 +1003,13 @@ new #[Title('Detalle de cuenta')] class extends Component {
             </flux:select>
             <flux:input type="number" step="0.001" wire:model="salidaForm.precio" label="Precio" />
             <flux:input type="number" step="0.001" wire:model="salidaForm.cantidad" label="Cantidad" />
+            <div class="flex justify-between items-baseline rounded-lg bg-zinc-50 dark:bg-white/5 px-3 py-2.5">
+                <span class="text-xs font-bold uppercase tracking-wide text-zinc-400">Total</span>
+                <span
+                    class="font-bold text-zinc-900 dark:text-white tabular-nums"
+                    x-text="'$' + ((Number($wire.salidaForm.precio) || 0) * (Number($wire.salidaForm.cantidad) || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })"
+                ></span>
+            </div>
             <flux:select wire:model="salidaForm.sucursalDestinoId" label="Sucursal destino">
                 <flux:select.option value="">Selecciona una sucursal</flux:select.option>
                 @foreach ($this->sucursales as $sucursal)

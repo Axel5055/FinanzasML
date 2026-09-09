@@ -25,7 +25,7 @@
                         </flux:sidebar.item>
                     @endif
 
-                    @if (auth()->user()->hasRole('Admin'))
+                    @if (auth()->user()->hasAnyRole(['Admin', 'Super Admin']))
                         <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.registrar.index')" :current="request()->routeIs('admin.registrar.index')" wire:navigate>
                             {{ __('Registrar Cuenta') }}
                         </flux:sidebar.item>
@@ -35,7 +35,7 @@
                     @endif
                 </flux:sidebar.group>
 
-                @if (auth()->user()->hasRole('Admin'))
+                @if (auth()->user()->hasAnyRole(['Admin', 'Super Admin']))
                     <flux:sidebar.group :heading="__('Administración')" class="grid">
                         <flux:sidebar.item icon="building-storefront" :href="route('admin.sucursales.index')" :current="request()->routeIs('admin.sucursales.*')" wire:navigate>
                             {{ __('Sucursales') }}
@@ -46,6 +46,12 @@
                         <flux:sidebar.item icon="users" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')" wire:navigate>
                             {{ __('Usuarios') }}
                         </flux:sidebar.item>
+
+                        @if (auth()->user()->hasRole('Super Admin'))
+                            <flux:sidebar.item icon="cog-6-tooth" :href="route('admin.configuracion.index')" :current="request()->routeIs('admin.configuracion.*')" wire:navigate>
+                                {{ __('Configuración') }}
+                            </flux:sidebar.item>
+                        @endif
                     </flux:sidebar.group>
                 @endif
             </flux:sidebar.nav>

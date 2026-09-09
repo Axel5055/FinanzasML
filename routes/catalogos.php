@@ -14,4 +14,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('admin/users', 'pages::usuarios.index')
         ->middleware('can:admin.users.index')
         ->name('admin.users.index');
+
+    Route::livewire('admin/configuracion', 'pages::configuracion.index')
+        ->middleware('can:admin.configuracion.index')
+        ->name('admin.configuracion.index');
 });

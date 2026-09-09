@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\ActivityLog;
+use App\Models\Configuracion;
 use App\Models\Cuenta;
 use App\Models\Entrada;
 use App\Models\Execution;
@@ -11,6 +12,7 @@ use App\Models\Producto;
 use App\Models\Salida;
 use App\Models\Sucursal;
 use Carbon\Carbon;
+use Domain\Cuentas\Actions\InterpretarFormularioCuentaAction;
 use Domain\Cuentas\Actions\ProcesarItemAction;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
@@ -18,8 +20,11 @@ use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
+use Livewire\WithFileUploads;
 
 new #[Title('Registrar cuenta')] class extends Component {
+    use WithFileUploads;
+
     public bool $esAdmin = false;
 
     public ?int $sucursalId = null;
@@ -68,6 +73,8 @@ new #[Title('Registrar cuenta')] class extends Component {
 
     public $efectivoEntregado = 0;
 
+    public $tarjeta = 0;
+
     // Modal de captura/edición de salidas
     public bool $openSalida = false;
 
@@ -84,10 +91,23 @@ new #[Title('Registrar cuenta')] class extends Component {
     // Modo edición: cuando se llega desde "Editar cuenta" en el detalle/listado
     public ?int $cuentaEditandoId = null;
 
+    // Llenado semi-automático a partir de fotos del formulario en papel
+    // (una por cada hoja impresa, ya que la plantilla ocupa varias páginas)
+    public array $fotosFormulario = [];
+
+    public bool $procesandoFoto = false;
+
+    public array $camposAutodetectados = [];
+
+    public array $renglonesNoReconocidos = [];
+
+    public bool $iaCapturaHabilitada = false;
+
     public function mount(?Cuenta $cuenta = null): void
     {
         $this->esAdmin = Auth::user()->hasRole('Admin');
         $this->sucursalId = $this->esAdmin ? null : Auth::user()->sucursal_id;
+        $this->iaCapturaHabilitada = Configuracion::activa(Configuracion::IA_CAPTURA_HABILITADA, default: true);
 
         $this->fechaVenta = now()->format('Y-m-d');
         $this->fechaCaptura = now()->format('Y-m-d');
@@ -112,6 +132,7 @@ new #[Title('Registrar cuenta')] class extends Component {
         $this->fechaVenta = Carbon::parse($cuenta->fecha_venta)->toDateString();
         $this->fechaCaptura = Carbon::parse($cuenta->fecha_captura)->toDateString();
         $this->efectivoEntregado = $cuenta->efectivo_entregado;
+        $this->tarjeta = $cuenta->tarjeta;
 
         $fechaVentaAnterior = Carbon::parse($this->fechaVenta)->subDay()->toDateString();
 
@@ -261,6 +282,159 @@ new #[Title('Registrar cuenta')] class extends Component {
         $this->sumExistencia = collect($this->items)->sum('importe_existencia');
 
         Flux::toast(variant: 'success', text: 'Precios nuevos aplicados.');
+    }
+
+    public function eliminarFotoFormulario(int $index): void
+    {
+        unset($this->fotosFormulario[$index]);
+        $this->fotosFormulario = array_values($this->fotosFormulario);
+    }
+
+    public function procesarFotoFormulario(): void
+    {
+        if (! $this->iaCapturaHabilitada) {
+            Flux::toast(variant: 'danger', text: 'El llenado automático con IA no está habilitado.');
+
+            return;
+        }
+
+        $this->validate([
+            'fotosFormulario' => ['required', 'array', 'min:1', 'max:8'],
+            'fotosFormulario.*' => ['file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:8192'],
+        ]);
+
+        if ($this->esAdmin && (empty($this->sucursalId) || empty($this->fechaVenta))) {
+            Flux::toast(variant: 'danger', text: 'Selecciona sucursal y fecha de venta antes de procesar la foto.');
+
+            return;
+        }
+
+        if (empty($this->items)) {
+            $this->cargarExistencia();
+        }
+
+        $this->procesandoFoto = true;
+
+        try {
+            $catalogo = Producto::orderBy('name')->pluck('name', 'id')->toArray();
+
+            $imagenes = collect($this->fotosFormulario)
+                ->map(fn ($foto) => ['contenido' => $foto->get(), 'mime_type' => $foto->getMimeType()])
+                ->all();
+
+            $datos = (new InterpretarFormularioCuentaAction)($imagenes, $catalogo);
+
+            $this->aplicarDatosDetectados($datos);
+        } catch (\Throwable $e) {
+            logger()->error('Error al interpretar foto de cuenta', ['error' => $e->getMessage()]);
+            Flux::toast(variant: 'danger', text: 'No se pudo procesar la foto: '.$e->getMessage());
+
+            return;
+        } finally {
+            $this->procesandoFoto = false;
+            $this->fotosFormulario = [];
+        }
+
+        $this->buttonsDisabled = false;
+    }
+
+    private function aplicarDatosDetectados(array $datos): void
+    {
+        $this->camposAutodetectados = [];
+        $this->renglonesNoReconocidos = [];
+
+        $indexPorProducto = [];
+        foreach ($this->items as $i => $item) {
+            $indexPorProducto[$item['producto_id']] = $i;
+        }
+
+        $aplicarCantidad = function (array $renglones, string $campoCantidad, string $campoImporte) use ($indexPorProducto) {
+            foreach ($renglones as $renglon) {
+                $cantidad = round((float) ($renglon['cantidad'] ?? 0), 3);
+
+                if ($cantidad <= 0) {
+                    continue;
+                }
+
+                $productoId = $renglon['producto_id'] ?? null;
+
+                if (! $productoId || ! isset($indexPorProducto[$productoId])) {
+                    $this->renglonesNoReconocidos[] = ($renglon['nombre_detectado'] ?? '?')." ({$cantidad})";
+
+                    continue;
+                }
+
+                $index = $indexPorProducto[$productoId];
+                $precio = (float) $this->items[$index]['precio'];
+
+                $this->items[$index][$campoCantidad] = $cantidad;
+                $this->items[$index][$campoImporte] = $this->formatearNumero($precio * $cantidad);
+                $this->camposAutodetectados["items.{$index}.{$campoCantidad}"] = true;
+            }
+        };
+
+        $aplicarCantidad($datos['entradas'] ?? [], 'cantidad_entrada', 'importe_entrada');
+        $aplicarCantidad($datos['sobrantes'] ?? [], 'cantidad_sobrante', 'importe_sobrante');
+
+        $this->sumEntrada = collect($this->items)->sum('importe_entrada');
+        $this->sumSobrante = collect($this->items)->sum('importe_sobrante');
+
+        $gastosDetectados = collect($datos['gastos'] ?? [])
+            ->filter(fn ($g) => ! empty($g['concepto']) && (float) ($g['precio'] ?? 0) > 0)
+            ->map(fn ($g) => ['concepto' => $g['concepto'], 'precio' => round((float) $g['precio'], 2)])
+            ->values()
+            ->toArray();
+
+        if (! empty($gastosDetectados)) {
+            $this->gastos = $gastosDetectados;
+            foreach (array_keys($gastosDetectados) as $i) {
+                $this->camposAutodetectados["gastos.{$i}"] = true;
+            }
+        }
+
+        $mermasDetectadas = collect($datos['mermas'] ?? [])
+            ->filter(fn ($m) => ! empty($m['concepto']) && (float) ($m['precio'] ?? 0) > 0)
+            ->map(fn ($m) => ['concepto' => $m['concepto'], 'precio' => round((float) $m['precio'], 2)])
+            ->values()
+            ->toArray();
+
+        if (! empty($mermasDetectadas)) {
+            $this->mermas = $mermasDetectadas;
+            foreach (array_keys($mermasDetectadas) as $i) {
+                $this->camposAutodetectados["mermas.{$i}"] = true;
+            }
+        }
+
+        if (! empty($datos['efectivo_entregado'])) {
+            $this->efectivoEntregado = round((float) $datos['efectivo_entregado'], 3);
+            $this->camposAutodetectados['efectivoEntregado'] = true;
+        }
+
+        if (! empty($datos['tarjeta'])) {
+            $this->tarjeta = round((float) $datos['tarjeta'], 3);
+            $this->camposAutodetectados['tarjeta'] = true;
+        }
+
+        // Las salidas necesitan una sucursal destino, dato que la hoja no
+        // captura, así que solo se avisan; no se guardan automáticamente.
+        $salidasDetectadas = collect($datos['salidas'] ?? [])->filter(fn ($s) => (float) ($s['cantidad'] ?? 0) > 0);
+
+        $resumen = [];
+        $totalCampos = collect($this->camposAutodetectados)->count();
+        if ($totalCampos > 0) {
+            $resumen[] = "{$totalCampos} campo(s) detectados";
+        }
+        if ($salidasDetectadas->isNotEmpty()) {
+            $resumen[] = $salidasDetectadas->count().' salida(s) detectada(s): agrégalas manualmente con su sucursal destino';
+        }
+        if (! empty($this->renglonesNoReconocidos)) {
+            $resumen[] = count($this->renglonesNoReconocidos).' renglón(es) no identificados, revísalos abajo';
+        }
+
+        Flux::toast(
+            variant: $totalCampos > 0 ? 'success' : 'warning',
+            text: $resumen ? 'Foto procesada: '.implode(' · ', $resumen) : 'No se detectaron datos en la foto.',
+        );
     }
 
     private function cargarExistencia(): void
@@ -444,7 +618,7 @@ new #[Title('Registrar cuenta')] class extends Component {
             'efectivo_pollo' => 0,
             'efectivo_marinado' => 0,
             'efectivo_entregado' => 0,
-            'transferencia' => 0,
+            'tarjeta' => 0,
             'efectivo_total' => 0,
             'diferencia' => 0,
             'sobrante' => 0,
@@ -503,7 +677,13 @@ new #[Title('Registrar cuenta')] class extends Component {
     #[Computed]
     public function diferenciaCalculada(): float
     {
-        return round($this->totalVentaCalculado() - (float) $this->efectivoEntregado, 3);
+        return round($this->totalVentaCalculado() - $this->totalCapturado(), 3);
+    }
+
+    #[Computed]
+    public function totalCapturado(): float
+    {
+        return round((float) $this->efectivoEntregado + (float) $this->tarjeta, 3);
     }
 
     public function irAPaso(int $step): void
@@ -541,7 +721,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     'efectivo_marinado' => 0,
                     'efectivo_pollo' => 0,
                     'efectivo_entregado' => (float) $this->efectivoEntregado,
-                    'transferencia' => 0,
+                    'tarjeta' => (float) $this->tarjeta,
                     'efectivo_total' => 0,
                     'diferencia' => $diferencia,
                     'sobrante' => $this->sumSobrante,
@@ -776,6 +956,57 @@ new #[Title('Registrar cuenta')] class extends Component {
             {{-- Paso 1: Existencia --}}
             @if ($step === 1)
                 <div x-data="{ q: '' }" class="space-y-4">
+                    @unless ($cuentaEditandoId || ! $iaCapturaHabilitada)
+                        <div class="rounded-xl border border-dashed border-accent/40 bg-accent-soft/40 p-4 space-y-3">
+                            <div class="flex items-center gap-2">
+                                <flux:icon name="camera" class="w-4.5 h-4.5 text-accent" />
+                                <span class="font-semibold text-sm">Llenado automático con foto o PDF (IA)</span>
+                            </div>
+                            <p class="text-xs text-zinc-500">
+                                Sube una foto por cada hoja del formulario en papel (puedes elegir varias a la vez), o un solo PDF si ya lo escaneaste; el sistema intentará detectar entradas, sobrante, gastos, merma y efectivo. Siempre revisa los datos antes de guardar.
+                            </p>
+                            <div class="flex flex-col sm:flex-row gap-2 items-start">
+                                <label
+                                    for="fotoFormularioInput"
+                                    class="inline-flex items-center gap-2 cursor-pointer select-none rounded-lg border border-zinc-300 dark:border-white/20 bg-white dark:bg-white/10 px-3 py-2 text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-white/20 transition"
+                                >
+                                    <flux:icon name="arrow-up-tray" class="w-4 h-4" />
+                                    <span>{{ count($fotosFormulario) ? 'Cambiar archivos' : 'Elegir fotos o PDF' }}</span>
+                                </label>
+                                <input id="fotoFormularioInput" type="file" wire:model="fotosFormulario" accept="image/*,application/pdf,.pdf" multiple class="hidden">
+
+                                <flux:button size="sm" icon="sparkles" wire:click="procesarFotoFormulario" :disabled="$procesandoFoto || ! count($fotosFormulario)">
+                                    {{ $procesandoFoto ? 'Procesando…' : 'Procesar con IA' }}
+                                </flux:button>
+                            </div>
+                            @error('fotosFormulario') <span class="text-xs text-negative">{{ $message }}</span> @enderror
+                            @error('fotosFormulario.*') <span class="text-xs text-negative">{{ $message }}</span> @enderror
+                            @if (count($fotosFormulario))
+                                <div class="flex flex-wrap gap-2">
+                                    @foreach ($fotosFormulario as $index => $foto)
+                                        <div wire:key="foto-{{ $index }}" class="inline-flex items-center gap-2 text-xs text-positive bg-positive-soft border border-positive/30 rounded-lg pl-3 pr-1.5 py-1.5 w-fit">
+                                            <flux:icon name="check-circle" class="w-4 h-4 flex-none" />
+                                            <span>{{ $foto->getClientOriginalName() }} cargado</span>
+                                            <button
+                                                type="button"
+                                                wire:click="eliminarFotoFormulario({{ $index }})"
+                                                class="cursor-pointer rounded-full p-0.5 text-positive/70 hover:text-negative hover:bg-negative-soft transition"
+                                                title="Quitar esta foto"
+                                            >
+                                                <flux:icon name="x-mark" class="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                            @if (! empty($renglonesNoReconocidos))
+                                <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                                    <strong>No identificados, agrégalos manualmente:</strong> {{ implode(', ', $renglonesNoReconocidos) }}
+                                </div>
+                            @endif
+                        </div>
+                    @endunless
+
                     <div class="flex flex-col sm:flex-row gap-2">
                         @unless ($cuentaEditandoId)
                             <flux:button wire:click="presentar" variant="primary">Presentar existencia</flux:button>
@@ -845,7 +1076,14 @@ new #[Title('Registrar cuenta')] class extends Component {
                                         >
                                             <flux:table.cell>{{ $item['producto'] }}</flux:table.cell>
                                             <flux:table.cell>${{ $this->formatearImporte($item['precio']) }}</flux:table.cell>
-                                            <flux:table.cell><flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_entrada" /></flux:table.cell>
+                                            <flux:table.cell>
+                                                <div class="flex items-center gap-1.5">
+                                                    <flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_entrada" />
+                                                    @if (isset($camposAutodetectados['items.'.$index.'.cantidad_entrada']))
+                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none" title="Detectado automáticamente" />
+                                                    @endif
+                                                </div>
+                                            </flux:table.cell>
                                             <flux:table.cell>${{ $this->formatearImporte($item['importe_entrada']) }}</flux:table.cell>
                                         </flux:table.row>
                                     @endforeach
@@ -869,6 +1107,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                             <flux:table.columns>
                                 <flux:table.column>Producto</flux:table.column>
                                 <flux:table.column>Destino</flux:table.column>
+                                <flux:table.column>Precio</flux:table.column>
                                 <flux:table.column>Cantidad</flux:table.column>
                                 <flux:table.column>Total</flux:table.column>
                                 <flux:table.column>Acciones</flux:table.column>
@@ -878,6 +1117,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                     <flux:table.row wire:key="salida-{{ $salida->id }}">
                                         <flux:table.cell>{{ $salida->producto->name }}</flux:table.cell>
                                         <flux:table.cell>{{ $salida->sucursalDestino->name }}</flux:table.cell>
+                                        <flux:table.cell>${{ $this->formatearImporte($salida->precio) }}</flux:table.cell>
                                         <flux:table.cell>{{ $salida->cantidad }}</flux:table.cell>
                                         <flux:table.cell>${{ $this->formatearImporte($salida->total) }}</flux:table.cell>
                                         <flux:table.cell>
@@ -905,6 +1145,9 @@ new #[Title('Registrar cuenta')] class extends Component {
                             <div class="flex gap-2 items-end" wire:key="gasto-{{ $index }}">
                                 <flux:input field:class="flex-1" size="sm" placeholder="Concepto" wire:model.live.debounce.500ms="gastos.{{ $index }}.concepto" />
                                 <flux:input field:class="w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="gastos.{{ $index }}.precio" />
+                                @if (isset($camposAutodetectados['gastos.'.$index]))
+                                    <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                @endif
                                 <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeGasto({{ $index }})" />
                             </div>
                         @endforeach
@@ -925,6 +1168,9 @@ new #[Title('Registrar cuenta')] class extends Component {
                             <div class="flex gap-2 items-end" wire:key="merma-{{ $index }}">
                                 <flux:input field:class="flex-1" size="sm" placeholder="Concepto" wire:model.live.debounce.500ms="mermas.{{ $index }}.concepto" />
                                 <flux:input field:class="w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="mermas.{{ $index }}.precio" />
+                                @if (isset($camposAutodetectados['mermas.'.$index]))
+                                    <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                @endif
                                 <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeMerma({{ $index }})" />
                             </div>
                         @endforeach
@@ -956,7 +1202,14 @@ new #[Title('Registrar cuenta')] class extends Component {
                                         >
                                             <flux:table.cell>{{ $item['producto'] }}</flux:table.cell>
                                             <flux:table.cell>${{ $this->formatearImporte($item['precio']) }}</flux:table.cell>
-                                            <flux:table.cell><flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_sobrante" /></flux:table.cell>
+                                            <flux:table.cell>
+                                                <div class="flex items-center gap-1.5">
+                                                    <flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_sobrante" />
+                                                    @if (isset($camposAutodetectados['items.'.$index.'.cantidad_sobrante']))
+                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none" title="Detectado automáticamente" />
+                                                    @endif
+                                                </div>
+                                            </flux:table.cell>
                                             <flux:table.cell>${{ $this->formatearImporte($item['importe_sobrante']) }}</flux:table.cell>
                                         </flux:table.row>
                                     @endforeach
@@ -1020,9 +1273,26 @@ new #[Title('Registrar cuenta')] class extends Component {
                             </div>
                         </div>
 
-                        {{-- Efectivo entregado / diferencia --}}
+                        {{-- Efectivo entregado / tarjeta / diferencia --}}
                         <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 p-5 space-y-4 self-start">
-                            <flux:input type="number" step="0.001" icon="currency-dollar" wire:model.live.debounce.500ms="efectivoEntregado" label="Efectivo entregado" />
+                            <div class="flex items-end gap-1.5">
+                                <flux:input field:class="flex-1" type="number" step="0.001" icon="currency-dollar" wire:model.live.debounce.500ms="efectivoEntregado" label="Efectivo entregado" />
+                                @if (isset($camposAutodetectados['efectivoEntregado']))
+                                    <flux:icon name="sparkles" class="w-4 h-4 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                @endif
+                            </div>
+
+                            <div class="flex items-end gap-1.5">
+                                <flux:input field:class="flex-1" type="number" step="0.001" icon="credit-card" wire:model.live.debounce.500ms="tarjeta" label="Pago con tarjeta" />
+                                @if (isset($camposAutodetectados['tarjeta']))
+                                    <flux:icon name="sparkles" class="w-4 h-4 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                @endif
+                            </div>
+
+                            <div class="flex justify-between items-baseline pt-1">
+                                <span class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400">Total capturado</span>
+                                <span class="font-bold text-zinc-900 dark:text-white">${{ $this->formatearImporte($this->totalCapturado()) }}</span>
+                            </div>
 
                             <div>
                                 <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-2">Diferencia</div>
@@ -1091,6 +1361,14 @@ new #[Title('Registrar cuenta')] class extends Component {
 
             <flux:input type="number" step="0.001" wire:model="salidaPrecio" label="Precio" />
             <flux:input type="number" step="0.001" wire:model="salidaCantidad" label="Cantidad" />
+
+            <div class="flex justify-between items-baseline rounded-lg bg-zinc-50 dark:bg-white/5 px-3 py-2.5">
+                <span class="text-xs font-bold uppercase tracking-wide text-zinc-400">Total</span>
+                <span
+                    class="font-bold text-zinc-900 dark:text-white tabular-nums"
+                    x-text="'$' + ((Number($wire.salidaPrecio) || 0) * (Number($wire.salidaCantidad) || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })"
+                ></span>
+            </div>
 
             <flux:select wire:model="salidaSucursalDestinoId" label="Sucursal destino">
                 <flux:select.option value="">Selecciona una sucursal</flux:select.option>

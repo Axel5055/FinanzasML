@@ -122,6 +122,7 @@
             text-transform: uppercase;
             padding: 6px 8px;
             text-align: left;
+            white-space: nowrap;
         }
 
         table.data td {
@@ -135,10 +136,6 @@
             text-align: right;
             border-top: 1.5px solid #1C211D;
             border-bottom: none;
-        }
-
-        .text-right {
-            text-align: right;
         }
 
         .text-center {
@@ -165,7 +162,7 @@
                 <div class="brand">Reporte de cuenta diaria</div>
                 <div class="sub">{{ $cuenta->sucursal->name ?? 'Sin sucursal' }} — {{ \Carbon\Carbon::parse($cuenta->fecha_venta)->translatedFormat('d \d\e F \d\e Y') }}</div>
             </td>
-            <td class="text-right"><span class="pill">{{ strtoupper($statusMeta['label']) }}</span></td>
+            <td style="text-align: right;"><span class="pill">{{ strtoupper($statusMeta['label']) }}</span></td>
         </tr>
     </table>
 
@@ -188,6 +185,10 @@
                 <div class="label">Efectivo entregado</div>
                 <div class="value">${{ number_format($cuenta->efectivo_entregado, 2) }}</div>
             </td>
+            <td class="stat-box">
+                <div class="label">Tarjeta</div>
+                <div class="value">${{ number_format($cuenta->tarjeta, 2) }}</div>
+            </td>
             <td class="stat-box" style="background-color: {{ $diferenciaBg }}; border-color: {{ $diferenciaBg }};">
                 <div class="label" style="color: {{ $diferenciaColor }};">Diferencia</div>
                 <div class="value" style="color: {{ $diferenciaColor }};">${{ number_format($cuenta->diferencia, 2) }}</div>
@@ -204,33 +205,33 @@
         <thead>
             <tr>
                 <th>Concepto</th>
-                <th class="text-right">Total</th>
+                <th>Total</th>
             </tr>
         </thead>
         <tbody>
             <tr>
                 <td>Existencia</td>
-                <td class="text-right">${{ number_format($cuenta->itemsCuenta->sum('importe_existencia'), 2) }}</td>
+                <td>${{ number_format($cuenta->itemsCuenta->sum('importe_existencia'), 2) }}</td>
             </tr>
             <tr>
                 <td>Entradas</td>
-                <td class="text-right">${{ number_format($cuenta->itemsCuenta->sum('importe_entrada'), 2) }}</td>
+                <td>${{ number_format($cuenta->itemsCuenta->sum('importe_entrada'), 2) }}</td>
             </tr>
             <tr>
                 <td>Salidas</td>
-                <td class="text-right">${{ number_format($cuenta->salidas->sum('total'), 2) }}</td>
+                <td>${{ number_format($cuenta->salidas->sum('total'), 2) }}</td>
             </tr>
             <tr>
                 <td>Sobrante</td>
-                <td class="text-right">${{ number_format($cuenta->itemsCuenta->sum('importe_sobrante'), 2) }}</td>
+                <td>${{ number_format($cuenta->itemsCuenta->sum('importe_sobrante'), 2) }}</td>
             </tr>
             <tr>
                 <td>Gastos</td>
-                <td class="text-right">${{ number_format($cuenta->gastos->sum('precio'), 2) }}</td>
+                <td>${{ number_format($cuenta->gastos->sum('precio'), 2) }}</td>
             </tr>
             <tr>
                 <td>Merma</td>
-                <td class="text-right">${{ number_format($cuenta->mermas->sum('precio'), 2) }}</td>
+                <td>${{ number_format($cuenta->mermas->sum('precio'), 2) }}</td>
             </tr>
         </tbody>
     </table>
@@ -246,22 +247,22 @@
             <thead>
                 <tr>
                     <th>Producto</th>
-                    <th class="text-right">Precio</th>
-                    <th class="text-right">Existencia</th>
-                    <th class="text-right">Entrada</th>
-                    <th class="text-right">Salida</th>
-                    <th class="text-right">Sobrante</th>
+                    <th>Precio</th>
+                    <th>Existencia</th>
+                    <th>Entrada</th>
+                    <th>Salida</th>
+                    <th>Sobrante</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($itemsConMovimiento as $item)
                     <tr>
                         <td>{{ $item->producto->name ?? 'N/A' }}</td>
-                        <td class="text-right">${{ number_format($item->precio, 2) }}</td>
-                        <td class="text-right">{{ number_format($item->cantidad_existencia, 2) }} kg</td>
-                        <td class="text-right">{{ number_format($item->cantidad_entrada, 2) }} kg</td>
-                        <td class="text-right">{{ number_format($item->cantidad_salida, 2) }} kg</td>
-                        <td class="text-right">{{ number_format($item->cantidad_sobrante, 2) }} kg</td>
+                        <td>${{ number_format($item->precio, 2) }}</td>
+                        <td>{{ number_format($item->cantidad_existencia, 2) }} kg</td>
+                        <td>{{ number_format($item->cantidad_entrada, 2) }} kg</td>
+                        <td>{{ number_format($item->cantidad_salida, 2) }} kg</td>
+                        <td>{{ number_format($item->cantidad_sobrante, 2) }} kg</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -274,9 +275,9 @@
             <tr>
                 <th>Producto</th>
                 <th>Sucursal origen</th>
-                <th class="text-right">Precio</th>
-                <th class="text-right">Cantidad</th>
-                <th class="text-right">Total</th>
+                <th>Precio</th>
+                <th>Cantidad</th>
+                <th>Total</th>
             </tr>
         </thead>
         <tbody>
@@ -284,9 +285,9 @@
                 <tr>
                     <td>{{ $entrada->producto->name ?? 'N/A' }}</td>
                     <td>{{ $entrada->sucursalOrigen->name ?? 'N/A' }}</td>
-                    <td class="text-right">${{ number_format($entrada->precio_envio, 2) }}</td>
-                    <td class="text-right">{{ number_format($entrada->cantidad, 2) }} kg</td>
-                    <td class="text-right">${{ number_format($entrada->total, 2) }}</td>
+                    <td>${{ number_format($entrada->precio_envio, 2) }}</td>
+                    <td>{{ number_format($entrada->cantidad, 2) }} kg</td>
+                    <td>${{ number_format($entrada->total, 2) }}</td>
                 </tr>
             @empty
                 <tr class="empty-row">
@@ -309,9 +310,9 @@
             <tr>
                 <th>Producto</th>
                 <th>Sucursal destino</th>
-                <th class="text-right">Precio</th>
-                <th class="text-right">Cantidad</th>
-                <th class="text-right">Total</th>
+                <th>Precio</th>
+                <th>Cantidad</th>
+                <th>Total</th>
             </tr>
         </thead>
         <tbody>
@@ -319,9 +320,9 @@
                 <tr>
                     <td>{{ $salida->producto->name ?? 'N/A' }}</td>
                     <td>{{ $salida->sucursalDestino->name ?? 'N/A' }}</td>
-                    <td class="text-right">${{ number_format($salida->precio, 2) }}</td>
-                    <td class="text-right">{{ number_format($salida->cantidad, 2) }} kg</td>
-                    <td class="text-right">${{ number_format($salida->total, 2) }}</td>
+                    <td>${{ number_format($salida->precio, 2) }}</td>
+                    <td>{{ number_format($salida->cantidad, 2) }} kg</td>
+                    <td>${{ number_format($salida->total, 2) }}</td>
                 </tr>
             @empty
                 <tr class="empty-row">
@@ -343,14 +344,14 @@
         <thead>
             <tr>
                 <th>Concepto</th>
-                <th class="text-right">Precio</th>
+                <th>Precio</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($cuenta->gastos as $gasto)
                 <tr>
                     <td>{{ $gasto->concepto }}</td>
-                    <td class="text-right">${{ number_format($gasto->precio, 2) }}</td>
+                    <td>${{ number_format($gasto->precio, 2) }}</td>
                 </tr>
             @empty
                 <tr class="empty-row">
@@ -372,14 +373,14 @@
         <thead>
             <tr>
                 <th>Concepto</th>
-                <th class="text-right">Precio</th>
+                <th>Precio</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($cuenta->mermas as $merma)
                 <tr>
                     <td>{{ $merma->concepto }}</td>
-                    <td class="text-right">${{ number_format($merma->precio, 2) }}</td>
+                    <td>${{ number_format($merma->precio, 2) }}</td>
                 </tr>
             @empty
                 <tr class="empty-row">

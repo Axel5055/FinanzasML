@@ -64,6 +64,22 @@
         table.data {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
+        }
+
+        table.data col.col-fecha {
+            width: 15%;
+        }
+
+        table.data col.col-efectivo,
+        table.data col.col-tarjeta,
+        table.data col.col-total,
+        table.data col.col-diferencia {
+            width: 17%;
+        }
+
+        table.data col.col-status {
+            width: 17%;
         }
 
         table.data th {
@@ -73,6 +89,7 @@
             text-transform: uppercase;
             padding: 6px 8px;
             text-align: left;
+            white-space: nowrap;
         }
 
         table.data td {
@@ -161,12 +178,21 @@
 
     <div class="section-title">Detalle de cuentas</div>
     <table class="data">
+        <colgroup>
+            <col class="col-fecha">
+            <col class="col-efectivo">
+            <col class="col-tarjeta">
+            <col class="col-total">
+            <col class="col-diferencia">
+            <col class="col-status">
+        </colgroup>
         <thead>
             <tr>
                 <th>Fecha de venta</th>
-                <th class="text-right">Efectivo entregado</th>
-                <th class="text-right">Total venta</th>
-                <th class="text-right">Diferencia</th>
+                <th>Efectivo</th>
+                <th>Tarjeta</th>
+                <th>Total venta</th>
+                <th>Diferencia</th>
                 <th>Status</th>
             </tr>
         </thead>
@@ -175,25 +201,27 @@
                 @php $meta = $statusMeta[$cuenta->status_cuenta_id] ?? ['label' => $cuenta->status_cuenta->name ?? '—', 'bg' => '#F3E3CE', 'color' => '#C1721E']; @endphp
                 <tr>
                     <td>{{ \Carbon\Carbon::parse($cuenta->fecha_venta)->format('d/m/Y') }}</td>
-                    <td class="text-right">${{ number_format($cuenta->efectivo_entregado, 2) }}</td>
-                    <td class="text-right">${{ number_format($cuenta->total_venta, 2) }}</td>
-                    <td class="text-right" style="color: {{ $cuenta->diferencia > 0 ? '#B23B2E' : '#2F7A4F' }};">
+                    <td>${{ number_format($cuenta->efectivo_entregado, 2) }}</td>
+                    <td>${{ number_format($cuenta->tarjeta, 2) }}</td>
+                    <td>${{ number_format($cuenta->total_venta, 2) }}</td>
+                    <td style="color: {{ $cuenta->diferencia > 0 ? '#B23B2E' : '#2F7A4F' }};">
                         ${{ number_format($cuenta->diferencia, 2) }}
                     </td>
                     <td><span class="pill" style="background-color: {{ $meta['bg'] }}; color: {{ $meta['color'] }};">{{ strtoupper($meta['label']) }}</span></td>
                 </tr>
             @empty
                 <tr class="empty-row">
-                    <td colspan="5">No hay cuentas para mostrar</td>
+                    <td colspan="6">No hay cuentas para mostrar</td>
                 </tr>
             @endforelse
         </tbody>
         <tfoot>
             <tr>
                 <td>Total</td>
-                <td class="text-right">${{ number_format($cuentas->sum('efectivo_entregado'), 2) }}</td>
-                <td class="text-right">${{ number_format($totalVenta, 2) }}</td>
-                <td class="text-right">${{ number_format($cuentas->sum('diferencia'), 2) }}</td>
+                <td>${{ number_format($cuentas->sum('efectivo_entregado'), 2) }}</td>
+                <td>${{ number_format($cuentas->sum('tarjeta'), 2) }}</td>
+                <td>${{ number_format($totalVenta, 2) }}</td>
+                <td>${{ number_format($cuentas->sum('diferencia'), 2) }}</td>
                 <td></td>
             </tr>
         </tfoot>

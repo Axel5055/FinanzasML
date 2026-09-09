@@ -19,7 +19,7 @@ class Cuenta extends Model
         'efectivo_total',
         'efectivo_entregado',
         'total_venta',
-        'transferencia',
+        'tarjeta',
         'diferencia',
         'sobrante',
         'fecha_captura',

@@ -12,6 +12,7 @@ class RoleSeeder extends Seeder
     {
         $admin = Role::create(['name' => 'Admin']);
         Role::create(['name' => 'Capturista']);
+        $superAdmin = Role::create(['name' => 'Super Admin']);
 
         Permission::create(['name' => 'admin.cuentas.index'])->assignRole($admin);
         Permission::create(['name' => 'admin.cuentas.show'])->assignRole($admin);
@@ -19,5 +20,9 @@ class RoleSeeder extends Seeder
         Permission::create(['name' => 'admin.sucursales.index'])->assignRole($admin);
         Permission::create(['name' => 'admin.productos.index'])->assignRole($admin);
         Permission::create(['name' => 'admin.users.index'])->assignRole($admin);
+        Permission::create(['name' => 'admin.configuracion.index'])->assignRole($superAdmin);
+
+        // Super Admin tiene todo lo de Admin, más los permisos exclusivos de arriba.
+        $superAdmin->syncPermissions(Permission::all());
     }
 }
