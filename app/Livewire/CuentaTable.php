@@ -129,7 +129,7 @@ final class CuentaTable extends PowerGridComponent
     {
         return [
             Filter::select('sucursal_id')
-                ->dataSource(Sucursal::orderBy('name')->get())
+                ->dataSource(Sucursal::activas()->orderBy('name')->get())
                 ->optionValue('id')
                 ->optionLabel('name'),
             Filter::select('status_cuenta_id')

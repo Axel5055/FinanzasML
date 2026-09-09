@@ -6,6 +6,7 @@ use App\Models\User;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -36,7 +37,9 @@ new #[Title('Usuarios')] class extends Component {
     #[Computed]
     public function roles()
     {
-        return Role::all();
+        return Role::query()
+            ->when(! Auth::user()->hasRole('Super Admin'), fn ($q) => $q->where('name', '!=', 'Super Admin'))
+            ->get();
     }
 
     #[Computed]
@@ -63,13 +66,18 @@ new #[Title('Usuarios')] class extends Component {
         $this->form['password_confirmation'] = $password;
     }
 
+    private function rolesPermitidos(): array
+    {
+        return $this->roles->pluck('name')->all();
+    }
+
     public function crear(): void
     {
         $this->validate([
             'form.name' => ['required', 'string'],
             'form.email' => ['required', 'email', 'unique:users,email'],
             'form.sucursal_id' => ['nullable', 'integer'],
-            'form.rol' => ['required'],
+            'form.rol' => ['required', Rule::in($this->rolesPermitidos())],
             'form.password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
@@ -122,7 +130,7 @@ new #[Title('Usuarios')] class extends Component {
             'form.name' => ['required', 'string'],
             'form.email' => ['required', 'email', 'unique:users,email,'.$this->editId],
             'form.sucursal_id' => ['nullable', 'integer'],
-            'form.rol' => ['required'],
+            'form.rol' => ['required', Rule::in($this->rolesPermitidos())],
         ];
 
         if (filled($this->form['password'])) {
