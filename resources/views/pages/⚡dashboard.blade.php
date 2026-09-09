@@ -459,9 +459,10 @@ new #[Title('Dashboard')] class extends Component {
                 <flux:button wire:click="actualizarGrafica">Filtrar</flux:button>
             </div>
 
-            @once
+            @assets
                 <script src="https://code.highcharts.com/highcharts.js"></script>
-            @endonce
+                <script src="https://code.highcharts.com/modules/accessibility.js"></script>
+            @endassets
 
             <div
                 wire:ignore

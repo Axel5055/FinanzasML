@@ -858,64 +858,77 @@ new #[Title('Registrar cuenta')] class extends Component {
 
 <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
     {{-- RIEL DE NAVEGACIÓN --}}
-    <div class="bg-white dark:bg-white/10 rounded-xl border border-zinc-200 dark:border-white/10 overflow-hidden lg:sticky lg:top-6">
-        <div class="p-5">
-            <div class="text-base font-extrabold text-zinc-900 dark:text-white">ML GRUPO</div>
-            <div class="text-xs text-zinc-500">Registro de cuenta diaria</div>
-            @if ($cuentaEditandoId)
-                <span class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold text-accent">
-                    <flux:icon name="pencil-square" class="w-3 h-3" />
-                    Editando cuenta existente
-                </span>
-            @endif
+    <div x-data="{ open: false }" class="bg-white dark:bg-white/10 rounded-xl border border-zinc-200 dark:border-white/10 overflow-hidden lg:sticky lg:top-6">
+        <div class="p-5 flex items-start justify-between gap-3">
+            <div>
+                <div class="text-base font-extrabold text-zinc-900 dark:text-white">ML GRUPO</div>
+                <div class="text-xs text-zinc-500">Registro de cuenta diaria</div>
+                @if ($cuentaEditandoId)
+                    <span class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold text-accent">
+                        <flux:icon name="pencil-square" class="w-3 h-3" />
+                        Editando cuenta existente
+                    </span>
+                @endif
+            </div>
+            <button
+                type="button"
+                x-on:click="open = !open"
+                class="lg:hidden flex-none flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-white/10 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300"
+            >
+                <span x-text="open ? 'Ocultar' : 'Ver progreso'"></span>
+                <flux:icon name="chevron-down" x-bind:class="open ? 'rotate-180' : ''" class="w-3.5 h-3.5 transition-transform" />
+            </button>
         </div>
 
-        @if ($sucursalActual)
-            <div class="px-5 pb-4">
-                <span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 dark:bg-white/10 px-3 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200">
-                    <flux:icon name="home" class="w-3.5 h-3.5" />
-                    {{ $sucursalActual }}
-                </span>
-            </div>
-        @endif
+        <div :class="open ? '' : 'hidden lg:block'">
+            @if ($sucursalActual)
+                <div class="px-5 pb-4">
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 dark:bg-white/10 px-3 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200">
+                        <flux:icon name="home" class="w-3.5 h-3.5" />
+                        {{ $sucursalActual }}
+                    </span>
+                </div>
+            @endif
 
-        <flux:separator />
+            <flux:separator />
 
-        <nav class="p-3 space-y-1">
-            @foreach ($steps as $n => $label)
-                <button
-                    type="button"
-                    wire:click="irAPaso({{ $n }})"
-                    @if ($n > $maxStepReached) disabled @endif
-                    class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-start transition
-                        {{ $step === $n
-                            ? 'bg-accent-soft text-accent'
-                            : ($n <= $maxStepReached ? 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5' : 'text-zinc-300 dark:text-zinc-600 cursor-not-allowed') }}"
-                >
-                    <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-none
-                        {{ $step === $n ? 'bg-accent text-white' : 'bg-zinc-100 dark:bg-white/10 text-zinc-400' }}">{{ $n }}</span>
-                    <flux:icon :name="$stepIcons[$n]" class="w-4 h-4 flex-none" />
-                    <span>{{ $label }}</span>
-                </button>
-            @endforeach
-        </nav>
+            <nav class="p-3 space-y-1">
+                @foreach ($steps as $n => $label)
+                    <button
+                        type="button"
+                        wire:click="irAPaso({{ $n }})"
+                        x-on:click="open = false"
+                        @if ($n > $maxStepReached) disabled @endif
+                        class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-start transition
+                            {{ $step === $n
+                                ? 'bg-accent-soft text-accent'
+                                : ($n <= $maxStepReached ? 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5' : 'text-zinc-300 dark:text-zinc-600 cursor-not-allowed') }}"
+                    >
+                        <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-none
+                            {{ $step === $n ? 'bg-accent text-white' : 'bg-zinc-100 dark:bg-white/10 text-zinc-400' }}">{{ $n }}</span>
+                        <flux:icon :name="$stepIcons[$n]" class="w-4 h-4 flex-none" />
+                        <span>{{ $label }}</span>
+                    </button>
+                @endforeach
+            </nav>
 
-        <flux:separator />
+            <flux:separator />
 
-        <div class="p-5 bg-zinc-50 dark:bg-white/5">
-            <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500 mb-3">Resumen en vivo</div>
-            <div class="space-y-1.5 text-sm">
-                <div class="flex justify-between"><span class="text-zinc-500">Existencia</span><span class="font-semibold text-positive">+${{ $this->formatearImporte($sumExistencia) }}</span></div>
-                <div class="flex justify-between"><span class="text-zinc-500">Entrada</span><span class="font-semibold text-positive">+${{ $this->formatearImporte($sumEntrada) }}</span></div>
-                <div class="flex justify-between"><span class="text-zinc-500">Salidas</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($totalSalidas) }}</span></div>
-                <div class="flex justify-between"><span class="text-zinc-500">Gastos</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($this->sumGastos()) }}</span></div>
-                <div class="flex justify-between"><span class="text-zinc-500">Merma</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($this->sumMermas()) }}</span></div>
-                <div class="flex justify-between"><span class="text-zinc-500">Sobrante</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($sumSobrante) }}</span></div>
-            </div>
-            <flux:separator class="my-3" />
-            <div class="flex justify-between items-baseline">
-                <span class="font-bold text-zinc-900 dark:text-white">Total</span>
-                <span class="text-lg font-extrabold text-zinc-900 dark:text-white">${{ $this->formatearImporte($this->totalVentaCalculado()) }}</span>
+            <div class="p-5 bg-zinc-50 dark:bg-white/5">
+                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500 mb-3">Resumen en vivo</div>
+                <div class="space-y-1.5 text-sm">
+                    <div class="flex justify-between"><span class="text-zinc-500">Existencia</span><span class="font-semibold text-positive">+${{ $this->formatearImporte($sumExistencia) }}</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-500">Entrada</span><span class="font-semibold text-positive">+${{ $this->formatearImporte($sumEntrada) }}</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-500">Salidas</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($totalSalidas) }}</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-500">Gastos</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($this->sumGastos()) }}</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-500">Merma</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($this->sumMermas()) }}</span></div>
+                    <div class="flex justify-between"><span class="text-zinc-500">Sobrante</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($sumSobrante) }}</span></div>
+                </div>
+                <flux:separator class="my-3" />
+                <div class="flex justify-between items-baseline">
+                    <span class="font-bold text-zinc-900 dark:text-white">Total</span>
+                    <span class="text-lg font-extrabold text-zinc-900 dark:text-white">${{ $this->formatearImporte($this->totalVentaCalculado()) }}</span>
+                </div>
             </div>
         </div>
     </div>
@@ -1016,7 +1029,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     </div>
 
                     <div class="w-full overflow-x-auto max-h-[28rem] overflow-y-auto">
-                        <flux:table>
+                        <flux:table class="min-w-[640px]">
                             <flux:table.columns>
                                 <flux:table.column>Producto</flux:table.column>
                                 <flux:table.column>Precio</flux:table.column>
@@ -1060,7 +1073,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     <div x-data="{ q: '' }" class="space-y-3">
                         <flux:input x-model="q" icon="magnifying-glass" placeholder="Buscar producto..." class="sm:max-w-xs" />
                         <div class="overflow-x-auto max-h-[28rem] overflow-y-auto">
-                            <flux:table>
+                            <flux:table class="min-w-[640px]">
                                 <flux:table.columns>
                                     <flux:table.column>Producto</flux:table.column>
                                     <flux:table.column>Precio</flux:table.column>
@@ -1103,7 +1116,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                         <flux:button size="sm" icon="plus" wire:click="abrirModalSalida">Agregar salida</flux:button>
                     </div>
                     <div class="overflow-x-auto">
-                        <flux:table>
+                        <flux:table class="min-w-[760px]">
                             <flux:table.columns>
                                 <flux:table.column>Producto</flux:table.column>
                                 <flux:table.column>Destino</flux:table.column>
@@ -1142,13 +1155,15 @@ new #[Title('Registrar cuenta')] class extends Component {
                     </div>
                     <div class="space-y-2">
                         @foreach ($gastos as $index => $gasto)
-                            <div class="flex gap-2 items-end" wire:key="gasto-{{ $index }}">
+                            <div class="flex flex-col sm:flex-row gap-2 sm:items-end" wire:key="gasto-{{ $index }}">
                                 <flux:input field:class="flex-1" size="sm" placeholder="Concepto" wire:model.live.debounce.500ms="gastos.{{ $index }}.concepto" />
-                                <flux:input field:class="w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="gastos.{{ $index }}.precio" />
-                                @if (isset($camposAutodetectados['gastos.'.$index]))
-                                    <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
-                                @endif
-                                <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeGasto({{ $index }})" />
+                                <div class="flex gap-2 items-end">
+                                    <flux:input field:class="flex-1 sm:w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="gastos.{{ $index }}.precio" />
+                                    @if (isset($camposAutodetectados['gastos.'.$index]))
+                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                    @endif
+                                    <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeGasto({{ $index }})" />
+                                </div>
                             </div>
                         @endforeach
                     </div>
@@ -1165,13 +1180,15 @@ new #[Title('Registrar cuenta')] class extends Component {
                     </div>
                     <div class="space-y-2">
                         @foreach ($mermas as $index => $merma)
-                            <div class="flex gap-2 items-end" wire:key="merma-{{ $index }}">
+                            <div class="flex flex-col sm:flex-row gap-2 sm:items-end" wire:key="merma-{{ $index }}">
                                 <flux:input field:class="flex-1" size="sm" placeholder="Concepto" wire:model.live.debounce.500ms="mermas.{{ $index }}.concepto" />
-                                <flux:input field:class="w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="mermas.{{ $index }}.precio" />
-                                @if (isset($camposAutodetectados['mermas.'.$index]))
-                                    <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
-                                @endif
-                                <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeMerma({{ $index }})" />
+                                <div class="flex gap-2 items-end">
+                                    <flux:input field:class="flex-1 sm:w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="mermas.{{ $index }}.precio" />
+                                    @if (isset($camposAutodetectados['mermas.'.$index]))
+                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                    @endif
+                                    <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeMerma({{ $index }})" />
+                                </div>
                             </div>
                         @endforeach
                     </div>
@@ -1186,7 +1203,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     <div x-data="{ q: '' }" class="space-y-3">
                         <flux:input x-model="q" icon="magnifying-glass" placeholder="Buscar producto..." class="sm:max-w-xs" />
                         <div class="overflow-x-auto max-h-[28rem] overflow-y-auto">
-                            <flux:table>
+                            <flux:table class="min-w-[640px]">
                                 <flux:table.columns>
                                     <flux:table.column>Producto</flux:table.column>
                                     <flux:table.column>Precio</flux:table.column>
