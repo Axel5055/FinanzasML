@@ -1,7 +1,11 @@
 <?php
 
-use PowerComponents\LivewirePowerGrid\Components\Exports\OpenSpout\v5\{ExportToCsv, ExportToXLS};
-use PowerComponents\LivewirePowerGrid\FilterAttributes\{Boolean, InputText, Number, Select};
+use PowerComponents\LivewirePowerGrid\Components\Exports\OpenSpout\v5\ExportToCsv;
+use PowerComponents\LivewirePowerGrid\Components\Exports\OpenSpout\v5\ExportToXLS;
+use PowerComponents\LivewirePowerGrid\FilterAttributes\Boolean;
+use PowerComponents\LivewirePowerGrid\FilterAttributes\InputText;
+use PowerComponents\LivewirePowerGrid\FilterAttributes\Number;
+use PowerComponents\LivewirePowerGrid\FilterAttributes\Select;
 use PowerComponents\LivewirePowerGrid\Themes\Tailwind;
 
 return [

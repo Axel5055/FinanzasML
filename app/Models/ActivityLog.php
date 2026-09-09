@@ -19,11 +19,17 @@ class ActivityLog extends Model
         'ip_address',
     ];
 
+    /**
+     * @return BelongsTo<User, $this>
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
+    /**
+     * @return MorphTo<Model, $this>
+     */
     public function subject(): MorphTo
     {
         return $this->morphTo();
@@ -36,7 +42,7 @@ class ActivityLog extends Model
             'description' => $description,
             'subject_type' => $subject?->getMorphClass(),
             'subject_id' => $subject?->getKey(),
-            'ip_address' => request()?->ip(),
+            'ip_address' => request()->ip(),
         ]);
     }
 }

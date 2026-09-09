@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ItemCuenta extends Model
 {
+    /** @use HasFactory<Factory<ItemCuenta>> */
     use HasFactory;
 
     protected $table = 'item_cuentas';
@@ -42,11 +44,17 @@ class ItemCuenta extends Model
         'importe_mayoreo' => 0,
     ];
 
+    /**
+     * @return BelongsTo<Producto, $this>
+     */
     public function producto(): BelongsTo
     {
         return $this->belongsTo(Producto::class);
     }
 
+    /**
+     * @return BelongsTo<Cuenta, $this>
+     */
     public function cuenta(): BelongsTo
     {
         return $this->belongsTo(Cuenta::class);

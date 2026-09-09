@@ -27,7 +27,7 @@ class UsuariosSeeder extends Seeder
                 'sucursal_id' => $datos['sucursal_id'],
             ])->assignRole($datos['role']);
 
-            $this->command?->info("Usuario {$datos['email']} creado con contraseña temporal: {$password}");
+            $this->command->info("Usuario {$datos['email']} creado con contraseña temporal: {$password}");
         }
     }
 }

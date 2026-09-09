@@ -5,13 +5,15 @@ namespace App\Http\Controllers;
 use App\Models\Cuenta;
 use App\Models\Sucursal;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReporteController extends Controller
 {
-    public function download(Cuenta $cuenta)
+    public function download(Cuenta $cuenta): StreamedResponse
     {
         $cuenta->load([
             'sucursal', 'status_cuenta', 'itemsCuenta.producto',
@@ -30,7 +32,7 @@ class ReporteController extends Controller
         return response()->streamDownload(fn () => print ($pdf->stream()), $nombre);
     }
 
-    public function downloadByDateRange(Request $request)
+    public function downloadByDateRange(Request $request): RedirectResponse|StreamedResponse
     {
         $validated = $request->validate([
             'start_date' => 'required|date',
@@ -40,7 +42,7 @@ class ReporteController extends Controller
 
         $startDate = $validated['start_date'];
         $endDate = $validated['end_date'];
-        $sucursal = Sucursal::findOrFail($validated['sucursal_id']);
+        $sucursal = Sucursal::findOrFail((int) $validated['sucursal_id']);
 
         $cuentas = Cuenta::where('sucursal_id', $sucursal->id)
             ->whereBetween('fecha_venta', [$startDate, $endDate])

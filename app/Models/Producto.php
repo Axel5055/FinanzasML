@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Database\Factories\ProductoFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,7 +13,9 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Producto extends Model
 {
+    /** @use HasFactory<ProductoFactory> */
     use HasFactory;
+
     use SoftDeletes;
 
     protected $table = 'productos';
@@ -23,6 +26,9 @@ class Producto extends Model
         'precio',
     ];
 
+    /**
+     * @return Attribute<string, string>
+     */
     public function name(): Attribute
     {
         return Attribute::make(
@@ -30,26 +36,41 @@ class Producto extends Model
         );
     }
 
+    /**
+     * @return HasMany<ItemCuenta, $this>
+     */
     public function itemsCuenta(): HasMany
     {
         return $this->hasMany(ItemCuenta::class);
     }
 
+    /**
+     * @return HasOne<ItemCuenta, $this>
+     */
     public function itemCuenta(): HasOne
     {
         return $this->hasOne(ItemCuenta::class)->latestOfMany();
     }
 
+    /**
+     * @return BelongsTo<Categoria, $this>
+     */
     public function categoria(): BelongsTo
     {
         return $this->belongsTo(Categoria::class);
     }
 
+    /**
+     * @return HasMany<Salida, $this>
+     */
     public function salidas(): HasMany
     {
         return $this->hasMany(Salida::class);
     }
 
+    /**
+     * @return HasMany<Entrada, $this>
+     */
     public function entradas(): HasMany
     {
         return $this->hasMany(Entrada::class);

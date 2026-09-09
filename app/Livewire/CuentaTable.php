@@ -8,6 +8,9 @@ use App\Models\Sucursal;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use PowerComponents\LivewirePowerGrid\Column;
+use PowerComponents\LivewirePowerGrid\Components\Filters\FilterBase;
+use PowerComponents\LivewirePowerGrid\Components\SetUp\Footer;
+use PowerComponents\LivewirePowerGrid\Components\SetUp\Header;
 use PowerComponents\LivewirePowerGrid\Facades\Filter;
 use PowerComponents\LivewirePowerGrid\Facades\PowerGrid;
 use PowerComponents\LivewirePowerGrid\PowerGridComponent;
@@ -21,6 +24,9 @@ final class CuentaTable extends PowerGridComponent
 
     public string $sortDirection = 'desc';
 
+    /**
+     * @return array<int, Header|Footer>
+     */
     public function setUp(): array
     {
         return [
@@ -31,6 +37,9 @@ final class CuentaTable extends PowerGridComponent
         ];
     }
 
+    /**
+     * @return Builder<Cuenta>
+     */
     public function datasource(): Builder
     {
         return Cuenta::query()
@@ -45,6 +54,9 @@ final class CuentaTable extends PowerGridComponent
             ]);
     }
 
+    /**
+     * @return array<string, array<int, string>>
+     */
     public function relationSearch(): array
     {
         // PowerGrid combina relationSearch() con orWhereHas() al nivel superior
@@ -55,7 +67,7 @@ final class CuentaTable extends PowerGridComponent
         return [];
     }
 
-    private function formatearMoneda($valor): string
+    private function formatearMoneda(float|int|string $valor): string
     {
         $valor = (float) $valor;
 
@@ -113,6 +125,9 @@ final class CuentaTable extends PowerGridComponent
             );
     }
 
+    /**
+     * @return array<int, Column>
+     */
     public function columns(): array
     {
         return [
@@ -125,6 +140,9 @@ final class CuentaTable extends PowerGridComponent
         ];
     }
 
+    /**
+     * @return array<int, FilterBase>
+     */
     public function filters(): array
     {
         return [

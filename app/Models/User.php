@@ -51,6 +51,9 @@ class User extends Authenticatable implements PasskeyUser
         ];
     }
 
+    /**
+     * @return BelongsTo<Sucursal, $this>
+     */
     public function sucursal(): BelongsTo
     {
         return $this->belongsTo(Sucursal::class);

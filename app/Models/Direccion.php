@@ -3,12 +3,14 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Direccion extends Model
 {
+    /** @use HasFactory<Factory<Direccion>> */
     use HasFactory;
 
     protected $table = 'direcciones';
@@ -22,11 +24,17 @@ class Direccion extends Model
         'calle',
     ];
 
+    /**
+     * @return HasMany<Sucursal, $this>
+     */
     public function sucursales(): HasMany
     {
         return $this->hasMany(Sucursal::class);
     }
 
+    /**
+     * @return Attribute<non-falsy-string, never>
+     */
     public function direccionCompleta(): Attribute
     {
         return Attribute::get(function (mixed $value, array $attributes) {
