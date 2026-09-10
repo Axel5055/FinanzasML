@@ -1013,7 +1013,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 </div>
                             @endif
                             @if (! empty($renglonesNoReconocidos))
-                                <div class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
+                                <div class="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg p-2">
                                     <strong>No identificados, agrégalos manualmente:</strong> {{ implode(', ', $renglonesNoReconocidos) }}
                                 </div>
                             @endif
@@ -1093,7 +1093,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                                 <div class="flex items-center gap-1.5">
                                                     <flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_entrada" />
                                                     @if (isset($camposAutodetectados['items.'.$index.'.cantidad_entrada']))
-                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none" title="Detectado automáticamente" />
+                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none" title="Detectado automáticamente" />
                                                     @endif
                                                 </div>
                                             </flux:table.cell>
@@ -1160,7 +1160,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 <div class="flex gap-2 items-end">
                                     <flux:input field:class="flex-1 sm:w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="gastos.{{ $index }}.precio" />
                                     @if (isset($camposAutodetectados['gastos.'.$index]))
-                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
                                     @endif
                                     <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeGasto({{ $index }})" />
                                 </div>
@@ -1185,7 +1185,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 <div class="flex gap-2 items-end">
                                     <flux:input field:class="flex-1 sm:w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="mermas.{{ $index }}.precio" />
                                     @if (isset($camposAutodetectados['mermas.'.$index]))
-                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
                                     @endif
                                     <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeMerma({{ $index }})" />
                                 </div>
@@ -1223,7 +1223,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                                 <div class="flex items-center gap-1.5">
                                                     <flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_sobrante" />
                                                     @if (isset($camposAutodetectados['items.'.$index.'.cantidad_sobrante']))
-                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-amber-500 flex-none" title="Detectado automáticamente" />
+                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none" title="Detectado automáticamente" />
                                                     @endif
                                                 </div>
                                             </flux:table.cell>
@@ -1295,14 +1295,14 @@ new #[Title('Registrar cuenta')] class extends Component {
                             <div class="flex items-end gap-1.5">
                                 <flux:input field:class="flex-1" type="number" step="0.001" icon="currency-dollar" wire:model.live.debounce.500ms="efectivoEntregado" label="Efectivo entregado" />
                                 @if (isset($camposAutodetectados['efectivoEntregado']))
-                                    <flux:icon name="sparkles" class="w-4 h-4 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                    <flux:icon name="sparkles" class="w-4 h-4 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
                                 @endif
                             </div>
 
                             <div class="flex items-end gap-1.5">
                                 <flux:input field:class="flex-1" type="number" step="0.001" icon="credit-card" wire:model.live.debounce.500ms="tarjeta" label="Pago con tarjeta" />
                                 @if (isset($camposAutodetectados['tarjeta']))
-                                    <flux:icon name="sparkles" class="w-4 h-4 text-amber-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                    <flux:icon name="sparkles" class="w-4 h-4 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
                                 @endif
                             </div>
 

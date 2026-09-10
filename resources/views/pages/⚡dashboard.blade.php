@@ -340,7 +340,7 @@ new #[Title('Dashboard')] class extends Component {
                         @php
                             $color = match (strtoupper($cuenta['status'])) {
                                 'PENDIENTE' => 'red',
-                                'PAGO PARCIAL' => 'amber',
+                                'PAGO PARCIAL' => 'purple',
                                 'PAGADO' => 'green',
                                 default => 'zinc',
                             };

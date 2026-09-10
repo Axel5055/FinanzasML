@@ -34,10 +34,10 @@
     --color-zinc-900: #1c211d;
     --color-zinc-950: #10130f;
 
-    --color-accent: #c1721e;
-    --color-accent-content: #c1721e;
-    --color-accent-foreground: #fff8ee;
-    --color-accent-soft: #f3e3ce;
+    --color-accent: #7c3aed;
+    --color-accent-content: #7c3aed;
+    --color-accent-foreground: #faf8ff;
+    --color-accent-soft: #ede9fe;
 
     /* Cifras financieras: faltante (negative) / sobrante o pagado (positive). */
     --color-positive: #2f7a4f;
@@ -63,10 +63,10 @@
 
 @layer theme {
     .dark {
-        --color-accent: #d98b3f;
-        --color-accent-content: #e2a165;
+        --color-accent: #a78bfa;
+        --color-accent-content: #c4b5fd;
         --color-accent-foreground: #1c211d;
-        --color-accent-soft: color-mix(in oklab, #d98b3f, transparent 85%);
+        --color-accent-soft: color-mix(in oklab, #a78bfa, transparent 85%);
 
         --color-positive: #4ade80;
         --color-positive-soft: color-mix(in oklab, #2f7a4f, transparent 80%);

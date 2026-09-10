@@ -934,7 +934,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
                                     <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $this->formatearImporte($item->cantidad_sobrante) }} kg</td>
                                     <td class="px-4 py-2 text-right tabular-nums font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ $this->formatearImporte($item->importe_sobrante) }}</td>
                                     <td class="px-4 py-2 whitespace-nowrap">
-                                        <flux:button size="sm" color="amber" variant="ghost" wire:click="abrirItem({{ $item->id }})">Editar</flux:button>
+                                        <flux:button size="sm" color="purple" variant="ghost" wire:click="abrirItem({{ $item->id }})">Editar</flux:button>
                                     </td>
                                 </tr>
                             @empty
