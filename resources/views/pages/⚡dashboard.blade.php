@@ -58,7 +58,7 @@ new #[Title('Dashboard')] class extends Component {
     public function mount(): void
     {
         $user = Auth::user();
-        $this->isAdmin = $user->hasRole('Admin');
+        $this->isAdmin = $user->hasAnyRole(['Admin', 'Super Admin']);
         $this->sucursalId = $user->sucursal_id;
 
         $this->loadStats();
@@ -407,7 +407,7 @@ new #[Title('Dashboard')] class extends Component {
                 @forelse ($this->actividades as $log)
                     @php
                         $nombre = $log->user->name ?? 'Usuario eliminado';
-                        $esAdminLog = $log->user?->hasRole('Admin');
+                        $esAdminLog = $log->user?->hasAnyRole(['Admin', 'Super Admin']);
                     @endphp
                     <div class="flex items-start gap-3 py-3" wire:key="log-{{ $log->id }}">
                         <flux:avatar size="sm" :initials="mb_strtoupper(mb_substr($nombre, 0, 1))" />

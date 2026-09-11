@@ -105,7 +105,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
     public function mount(?Cuenta $cuenta = null): void
     {
-        $this->esAdmin = Auth::user()->hasRole('Admin');
+        $this->esAdmin = Auth::user()->hasAnyRole(['Admin', 'Super Admin']);
         $this->sucursalId = $this->esAdmin ? null : Auth::user()->sucursal_id;
         $this->iaCapturaHabilitada = Configuracion::activa(Configuracion::IA_CAPTURA_HABILITADA, default: true);
 

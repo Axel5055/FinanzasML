@@ -11,7 +11,7 @@ class UsuariosSeeder extends Seeder
     public function run(): void
     {
         $usuarios = [
-            ['name' => 'Ethan', 'email' => 'ethan@mlgrupo.com.mx', 'sucursal_id' => null, 'role' => 'Admin'],
+            ['name' => 'Ethan', 'email' => 'ethan@mlgrupo.com.mx', 'sucursal_id' => null, 'role' => 'Super Admin'],
             ['name' => 'Alberto', 'email' => 'alberto@mlgrupo.com.mx', 'sucursal_id' => null, 'role' => 'Admin'],
             ['name' => 'CARMEN SERDAN', 'email' => 'carmenserdan@mlgrupo.com.mx', 'sucursal_id' => 2, 'role' => 'Capturista'],
             ['name' => 'EL VERDE', 'email' => 'elverde@mlgrupo.com.mx', 'sucursal_id' => 2, 'role' => 'Capturista'],

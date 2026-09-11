@@ -15,7 +15,7 @@ new #[Title('Cuentas')] class extends Component {
         </span>
         <div>
             <flux:heading size="lg">Cuentas registradas</flux:heading>
-            <flux:subheading>{{ Auth::user()->hasRole('Admin') ? 'Todas las sucursales' : (Auth::user()->sucursal->name ?? '') }}</flux:subheading>
+            <flux:subheading>{{ Auth::user()->hasAnyRole(['Admin', 'Super Admin']) ? 'Todas las sucursales' : (Auth::user()->sucursal->name ?? '') }}</flux:subheading>
         </div>
     </div>
 
