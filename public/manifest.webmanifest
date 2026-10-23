@@ -1,0 +1,18 @@
+{
+    "name": "ML Grupo - Finanzas",
+    "short_name": "ML Grupo",
+    "description": "Registro diario de cuentas, ventas y existencias por sucursal.",
+    "id": "/",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "portrait",
+    "lang": "es-MX",
+    "background_color": "#ffffff",
+    "theme_color": "#7c3aed",
+    "icons": [
+        { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+        { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+        { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    ]
+}

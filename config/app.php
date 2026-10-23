@@ -67,6 +67,9 @@ return [
 
     'timezone' => 'UTC',
 
+    // Proxies en los que se confía para X-Forwarded-* (ngrok, balanceadores): '*' o IPs separadas por coma.
+    'trusted_proxies' => env('TRUSTED_PROXIES'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration

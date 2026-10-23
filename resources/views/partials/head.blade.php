@@ -6,7 +6,30 @@
 </title>
 
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#7c3aed">
+<meta name="app-version" content="{{ \App\Http\Controllers\AppVersionController::version() }}">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ML Grupo">
+<script>
+    window.addEventListener('beforeinstallprompt', (event) => {
+        event.preventDefault();
+        window.deferredInstallPrompt = event;
+        window.dispatchEvent(new CustomEvent('pwa-install-available'));
+    });
+
+    window.addEventListener('appinstalled', () => {
+        window.deferredInstallPrompt = null;
+        window.dispatchEvent(new CustomEvent('pwa-installed'));
+    });
+
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+    }
+</script>
 
 @fonts
 

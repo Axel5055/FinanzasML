@@ -50,5 +50,9 @@
                 </flux:button>
             </div>
         </form>
+
+        <x-install-app-button />
+
+        <x-update-app-link />
     </div>
 </x-layouts::auth>

@@ -8,9 +8,10 @@
             <div class="absolute inset-0 bg-cover bg-center" style="background-image: url('{{ asset('img/background.jpg') }}')"></div>
             <div class="absolute inset-0 bg-black/15"></div>
 
-            <div class="relative z-10 w-full max-w-[22rem] rounded-2xl bg-white shadow-2xl p-7">
+            <div class="relative z-10 w-full max-w-[22rem] rounded-2xl bg-white dark:bg-zinc-900 shadow-2xl p-7">
                 <a href="{{ route('home') }}" class="flex flex-col items-center gap-1 mb-5" wire:navigate>
-                    <img src="{{ asset('img/logo.svg') }}" alt="{{ config('app.name', 'Laravel') }}" class="h-10 w-auto" />
+                    <img src="{{ asset('img/logo.svg') }}" alt="{{ config('app.name', 'Laravel') }}" class="h-10 w-auto dark:hidden" />
+                    <img src="{{ asset('img/logo-white.svg') }}" alt="{{ config('app.name', 'Laravel') }}" class="hidden h-10 w-auto dark:block" />
                     <span class="sr-only">{{ config('app.name', 'Laravel') }}</span>
                 </a>
 

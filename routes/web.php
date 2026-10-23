@@ -1,10 +1,13 @@
 <?php
 
+use App\Http\Controllers\AppVersionController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect()->route(auth()->check() ? 'dashboard' : 'login');
 })->name('home');
+
+Route::get('app-version', AppVersionController::class)->name('app-version');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('dashboard', 'pages::dashboard')->name('dashboard');
