@@ -63,9 +63,35 @@
 
 @layer theme {
     .dark {
+        /* Carbón neutro: reemplaza el tinte verdoso de la paleta clara. Fondo (800),
+         * sidebar/tablas (900) y tarjetas (white/10) quedan bien separados. */
+        --color-zinc-50: #fafafa;
+        --color-zinc-100: #f4f4f5;
+        --color-zinc-200: #e4e4e7;
+        --color-zinc-300: #d4d4d8;
+        --color-zinc-400: #a8a8b0;
+        --color-zinc-500: #8e8e97;
+        --color-zinc-600: #6f6f78;
+        --color-zinc-700: #3a3a41;
+        --color-zinc-800: #1f1f23;
+        --color-zinc-900: #151518;
+        --color-zinc-950: #0c0c0e;
+
+        --color-pg-primary-50: #fafafa;
+        --color-pg-primary-100: #f4f4f5;
+        --color-pg-primary-200: #e4e4e7;
+        --color-pg-primary-300: #d4d4d8;
+        --color-pg-primary-400: #a8a8b0;
+        --color-pg-primary-500: #8e8e97;
+        --color-pg-primary-600: #6f6f78;
+        --color-pg-primary-700: #3a3a41;
+        --color-pg-primary-800: #1f1f23;
+        --color-pg-primary-900: #151518;
+        --color-pg-primary-950: #0c0c0e;
+
         --color-accent: #a78bfa;
         --color-accent-content: #c4b5fd;
-        --color-accent-foreground: #1c211d;
+        --color-accent-foreground: #151518;
         --color-accent-soft: color-mix(in oklab, #a78bfa, transparent 85%);
 
         --color-positive: #4ade80;

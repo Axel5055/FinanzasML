@@ -25,6 +25,16 @@ use Livewire\WithFileUploads;
 new #[Title('Registrar cuenta')] class extends Component {
     use WithFileUploads;
 
+    // Orden de captura del renglón "Sobrante" en la hoja impresa (izquierda y luego derecha).
+    // Los productos que no aparecen aquí se muestran después, en orden alfabético.
+    private const ORDEN_SOBRANTE = [
+        '*PECHUGA', '*PIERNA/MULOS', '*RETAZO', '*HUEVO BLANCO', '*ALA NATURAL', '*H/R', '*PATA',
+        '*MOLLEJA', '*HÍGADO', 'LONGANIZA', 'ALA MARINADA', 'PAPA IDAHO', 'PAPA ONDULADA',
+        'PAPA GAJO', 'PAPA ESPIRAL', 'PAPA CARITA', 'AROS DE CEBOLLA', 'ALITA PICOSITA',
+        'TILAPIA', 'SALMÓN', 'HAMBURGUESA DE SIRLOIN', 'BONELESS P/L - B', 'BONELESS N',
+        'NUGGET', 'TENDER', 'PALOMITA DE PECH.', 'HAMBURGUESA DE POLLO', 'TRONCO PROMO',
+    ];
+
     public bool $esAdmin = false;
 
     public ?int $sucursalId = null;
@@ -479,6 +489,23 @@ new #[Title('Registrar cuenta')] class extends Component {
         $this->sumExistencia = collect($this->items)->sum('importe_existencia');
         $this->sumEntrada = collect($this->items)->sum('importe_entrada');
         $this->sumSobrante = collect($this->items)->sum('importe_sobrante');
+    }
+
+    /**
+     * Índices de $items en el orden de la hoja impresa para el paso de Sobrante.
+     *
+     * @return array<int, int>
+     */
+    #[Computed]
+    public function indicesSobranteOrdenados(): array
+    {
+        $posiciones = array_flip(array_map(mb_strtoupper(...), self::ORDEN_SOBRANTE));
+        $posicion = fn (int $i): int => $posiciones[mb_strtoupper($this->items[$i]['producto'])] ?? PHP_INT_MAX;
+
+        $indices = array_keys($this->items);
+        usort($indices, fn (int $a, int $b) => $posicion($a) <=> $posicion($b) ?: $a <=> $b);
+
+        return $indices;
     }
 
     #[Computed]
@@ -1013,7 +1040,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 </div>
                             @endif
                             @if (! empty($renglonesNoReconocidos))
-                                <div class="text-xs text-violet-700 bg-violet-50 border border-violet-200 rounded-lg p-2">
+                                <div class="text-xs text-violet-700 bg-violet-50 border border-violet-200 dark:text-violet-300 dark:bg-violet-400/10 dark:border-violet-400/30 rounded-lg p-2">
                                     <strong>No identificados, agrégalos manualmente:</strong> {{ implode(', ', $renglonesNoReconocidos) }}
                                 </div>
                             @endif
@@ -1211,7 +1238,8 @@ new #[Title('Registrar cuenta')] class extends Component {
                                     <flux:table.column>Importe</flux:table.column>
                                 </flux:table.columns>
                                 <flux:table.rows>
-                                    @foreach ($items as $index => $item)
+                                    @foreach ($this->indicesSobranteOrdenados as $index)
+                                        @php $item = $items[$index]; @endphp
                                         <flux:table.row
                                             wire:key="item-{{ $item['producto_id'] }}"
                                             data-search="{{ \Illuminate\Support\Str::lower($item['producto']) }}"
