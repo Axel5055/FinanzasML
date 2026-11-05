@@ -25,14 +25,20 @@
                         </flux:sidebar.item>
                     @endif
 
-                    @can('admin.registrar.index')
-                        <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.registrar.index')" :current="request()->routeIs('admin.registrar.index')" wire:navigate>
-                            {{ __('Registrar Cuenta') }}
-                        </flux:sidebar.item>
-                    @endcan
                     @can('admin.cuentas.index')
-                        <flux:sidebar.item icon="banknotes" :href="route('admin.cuentas.index')" :current="request()->routeIs('admin.cuentas.*')" wire:navigate>
-                            {{ __('Cuentas') }}
+                        <flux:sidebar.group expandable icon="banknotes" :heading="__('Cuentas')" :expanded="true">
+                            <flux:sidebar.item icon="list-bullet" :href="route('admin.cuentas.index')" :current="request()->routeIs('admin.cuentas.*')" wire:navigate>
+                                {{ __('Todas las cuentas') }}
+                            </flux:sidebar.item>
+                            @can('admin.registrar.index')
+                                <flux:sidebar.item icon="plus-circle" :href="route('admin.registrar.index')" :current="request()->routeIs('admin.registrar.index')" wire:navigate>
+                                    {{ __('Registrar cuenta') }}
+                                </flux:sidebar.item>
+                            @endcan
+                        </flux:sidebar.group>
+                    @elsecan('admin.registrar.index')
+                        <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.registrar.index')" :current="request()->routeIs('admin.registrar.index')" wire:navigate>
+                            {{ __('Registrar cuenta') }}
                         </flux:sidebar.item>
                     @endcan
                 </flux:sidebar.group>
