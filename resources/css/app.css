@@ -17,48 +17,51 @@
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     /*
-     * Paleta cálida heredada del rediseño de "Registrar cuenta" del proyecto
-     * anterior (paper/surface/ink/accent). Se remapea sobre la escala zinc de
-     * Tailwind en vez de crear nombres nuevos, para que todos los componentes
-     * de Flux (card, table, sidebar, input...) hereden el look automáticamente.
+     * Paleta índigo/lavanda (fondo gris azulado, tarjetas blancas, acento violeta
+     * y sidebar azul marino). Se remapea sobre la escala zinc de Tailwind en vez
+     * de crear nombres nuevos, para que todos los componentes de Flux (card,
+     * table, sidebar, input...) hereden el look automáticamente.
      */
-    --color-zinc-50: #f8f9f7;
-    --color-zinc-100: #f1f3ef;
-    --color-zinc-200: #e9ece6;
-    --color-zinc-300: #dde3d8;
-    --color-zinc-400: #b7c0b2;
-    --color-zinc-500: #8a968e;
-    --color-zinc-600: #5c6961;
-    --color-zinc-700: #3e4740;
-    --color-zinc-800: #2a312b;
-    --color-zinc-900: #1c211d;
-    --color-zinc-950: #10130f;
+    --color-zinc-50: #f8f9fd;
+    --color-zinc-100: #f1f3fa;
+    --color-zinc-200: #e5e8f3;
+    --color-zinc-300: #d3d8ea;
+    --color-zinc-400: #a4abc6;
+    --color-zinc-500: #7a829f;
+    --color-zinc-600: #555d7c;
+    --color-zinc-700: #3b4260;
+    --color-zinc-800: #262d49;
+    --color-zinc-900: #1a2038;
+    --color-zinc-950: #0f1426;
 
-    --color-accent: #7c3aed;
-    --color-accent-content: #7c3aed;
-    --color-accent-foreground: #faf8ff;
-    --color-accent-soft: #ede9fe;
+    --color-accent: #6c63e8;
+    --color-accent-content: #5f56dd;
+    --color-accent-foreground: #ffffff;
+    --color-accent-soft: #ecebfd;
+
+    /* Violeta de marca para tarjetas destacadas (igual en claro y oscuro). */
+    --color-brand: #6c63e8;
 
     /* Cifras financieras: faltante (negative) / sobrante o pagado (positive). */
-    --color-positive: #2f7a4f;
-    --color-positive-soft: #e1efe5;
-    --color-negative: #b23b2e;
-    --color-negative-soft: #f6e4e1;
+    --color-positive: #23885a;
+    --color-positive-soft: #e2f5ec;
+    --color-negative: #cf3f55;
+    --color-negative-soft: #fdeaee;
 
     /* PowerGrid usa su propia escala pg-primary-* para bordes/texto/fondos de
      * su UI (buscador, cabecera, paginación); la mapeamos sobre la misma
-     * paleta cálida en vez de dejar el gris neutro por defecto. */
-    --color-pg-primary-50: #f8f9f7;
-    --color-pg-primary-100: #f1f3ef;
-    --color-pg-primary-200: #e9ece6;
-    --color-pg-primary-300: #dde3d8;
-    --color-pg-primary-400: #b7c0b2;
-    --color-pg-primary-500: #8a968e;
-    --color-pg-primary-600: #5c6961;
-    --color-pg-primary-700: #3e4740;
-    --color-pg-primary-800: #2a312b;
-    --color-pg-primary-900: #1c211d;
-    --color-pg-primary-950: #10130f;
+     * paleta en vez de dejar el gris neutro por defecto. */
+    --color-pg-primary-50: #f8f9fd;
+    --color-pg-primary-100: #f1f3fa;
+    --color-pg-primary-200: #e5e8f3;
+    --color-pg-primary-300: #d3d8ea;
+    --color-pg-primary-400: #a4abc6;
+    --color-pg-primary-500: #7a829f;
+    --color-pg-primary-600: #555d7c;
+    --color-pg-primary-700: #3b4260;
+    --color-pg-primary-800: #262d49;
+    --color-pg-primary-900: #1a2038;
+    --color-pg-primary-950: #0f1426;
 }
 
 @layer theme {
@@ -89,16 +92,44 @@
         --color-pg-primary-900: #151518;
         --color-pg-primary-950: #0c0c0e;
 
-        --color-accent: #a78bfa;
-        --color-accent-content: #c4b5fd;
-        --color-accent-foreground: #151518;
-        --color-accent-soft: color-mix(in oklab, #a78bfa, transparent 85%);
+        --color-accent: #8b84f5;
+        --color-accent-content: #b0abfa;
+        --color-accent-foreground: #12121a;
+        --color-accent-soft: color-mix(in oklab, #8b84f5, transparent 84%);
 
         --color-positive: #4ade80;
-        --color-positive-soft: color-mix(in oklab, #2f7a4f, transparent 80%);
-        --color-negative: #f87171;
-        --color-negative-soft: color-mix(in oklab, #b23b2e, transparent 80%);
+        --color-positive-soft: color-mix(in oklab, #23885a, transparent 78%);
+        --color-negative: #fb7185;
+        --color-negative-soft: color-mix(in oklab, #cf3f55, transparent 80%);
     }
+}
+
+/* Sidebar azul marino en modo claro: el elemento lleva también la clase `dark`
+ * (para que Flux use sus variantes oscuras) y aquí se tiñe la escala zinc. */
+html:not(.dark) .sidebar-navy {
+    --color-zinc-50: #f4f5fb;
+    --color-zinc-100: #e6e8f4;
+    --color-zinc-200: #cfd3e8;
+    --color-zinc-300: #b4bad8;
+    --color-zinc-400: #9199bd;
+    --color-zinc-500: #7a83a8;
+    --color-zinc-600: #5d6690;
+    --color-zinc-700: #2c3558;
+    --color-zinc-800: #232b4a;
+    --color-zinc-900: #181e37;
+    --color-zinc-950: #10152a;
+}
+
+/* Opciones de los <select> nativos en modo oscuro: sin esto el popup del navegador
+ * (sobre todo en celular) muestra fondo blanco con el texto claro heredado del select. */
+.dark {
+    color-scheme: dark;
+}
+
+.dark select option,
+.dark select optgroup {
+    background-color: var(--color-zinc-700);
+    color: var(--color-white);
 }
 
 @layer base {
@@ -129,3 +160,214 @@ select:focus[data-flux-control] {
 /* \[:where(&)\]:size-4 {
     @apply size-4;
 } */
+
+/* ---------- Modales (Flux) ---------- */
+ui-modal > dialog:not([data-flux-flyout]) {
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: 0 24px 60px -12px rgb(15 20 38 / 0.35);
+
+    @media (max-width: 639px) {
+        padding: 1.25rem;
+        max-width: calc(100vw - 1.5rem);
+        max-height: calc(100dvh - 1.5rem);
+    }
+}
+
+ui-modal > dialog::backdrop {
+    background-color: rgb(15 20 38 / 0.55);
+    backdrop-filter: blur(4px);
+}
+
+/* ---------- Confirmaciones (SweetAlert) ---------- */
+.swal2-container.swal2-backdrop-show,
+.swal2-container.swal2-noanimation {
+    background: rgb(15 20 38 / 0.55);
+    backdrop-filter: blur(4px);
+}
+
+.swal-ml-popup {
+    @apply rounded-2xl border border-zinc-200/70 bg-white p-6 text-zinc-900 shadow-2xl shadow-zinc-900/20;
+    font-family: inherit;
+}
+
+.dark .swal-ml-popup {
+    @apply border-zinc-700/70 bg-zinc-900 text-white;
+}
+
+.swal-ml-title {
+    @apply text-lg font-semibold tracking-tight text-zinc-900;
+}
+
+.dark .swal-ml-title {
+    @apply text-white;
+}
+
+.swal-ml-text {
+    @apply text-sm text-zinc-500;
+}
+
+.dark .swal-ml-text {
+    @apply text-zinc-400;
+}
+
+.swal-ml-actions {
+    @apply mt-2 flex w-full flex-wrap justify-center gap-2;
+}
+
+.swal-ml-btn {
+    @apply cursor-pointer rounded-lg px-4 py-2 text-sm font-medium transition;
+}
+
+.swal-ml-btn-primary {
+    @apply bg-accent text-white shadow-sm hover:brightness-110;
+}
+
+.dark .swal-ml-btn-primary {
+    @apply text-zinc-900;
+}
+
+.swal-ml-btn-secondary {
+    @apply border border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50;
+}
+
+.dark .swal-ml-btn-secondary {
+    @apply border-zinc-700 bg-transparent text-zinc-200 hover:bg-white/5;
+}
+
+.swal-ml-btn:focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-2;
+}
+
+.swal2-icon.swal2-question {
+    border-color: color-mix(in oklab, var(--color-accent), transparent 55%);
+    color: var(--color-accent);
+}
+
+.swal2-icon.swal2-error {
+    border-color: color-mix(in oklab, var(--color-negative), transparent 55%);
+    color: var(--color-negative);
+}
+
+.swal2-icon.swal2-error [class^='swal2-x-mark-line'] {
+    background-color: var(--color-negative);
+}
+
+.swal2-icon.swal2-warning {
+    border-color: #f5c26b;
+    color: #e0902a;
+}
+
+.swal2-icon.swal2-success {
+    border-color: color-mix(in oklab, var(--color-positive), transparent 55%);
+    color: var(--color-positive);
+}
+
+.swal2-icon.swal2-success [class^='swal2-success-line'] {
+    background-color: var(--color-positive);
+}
+
+.swal2-icon.swal2-success .swal2-success-ring {
+    border-color: color-mix(in oklab, var(--color-positive), transparent 70%);
+}
+
+/* ---------- Tabla de cuentas (PowerGrid) como tarjetas en celular ---------- */
+@media (max-width: 1023px) {
+    .power-grid-table,
+    .power-grid-table tbody {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+
+    .power-grid-table thead {
+        display: none;
+    }
+
+    .power-grid-table tbody tr {
+        padding: 0.875rem 1rem;
+
+        > td {
+            padding: 0;
+            white-space: normal;
+            min-width: 0;
+        }
+
+        > td:not(:has(*)) {
+            display: none;
+        }
+    }
+
+    /* Fila de datos: tarjeta */
+    .power-grid-table tbody tr:not(:has(> td[wire\:key^='column-filter'])) {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        grid-template-areas:
+            'fecha status'
+            'sucursal sucursal'
+            'total diferencia'
+            'acciones acciones';
+        gap: 0.5rem 0.75rem;
+        align-items: center;
+
+        > td:nth-of-type(1) { grid-area: fecha; }
+        > td:nth-of-type(2) { grid-area: sucursal; }
+        > td:nth-of-type(3) { grid-area: total; }
+        > td:nth-of-type(4) { grid-area: diferencia; }
+        > td:nth-of-type(5) { grid-area: status; justify-self: end; }
+        > td:nth-of-type(6) {
+            grid-area: acciones;
+            padding-top: 0.75rem;
+            border-top: 1px solid color-mix(in oklab, currentColor, transparent 90%);
+        }
+
+        > td:nth-of-type(3)::before,
+        > td:nth-of-type(4)::before {
+            display: block;
+            margin-bottom: 0.125rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--color-zinc-500);
+        }
+
+        > td:nth-of-type(3)::before { content: 'Total venta'; }
+        > td:nth-of-type(4)::before { content: 'Diferencia'; }
+    }
+
+    /* Fila de filtros: apilada, con etiqueta en cada filtro */
+    .power-grid-table tbody tr:has(> td[wire\:key^='column-filter']) {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+
+        @media (min-width: 640px) {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        > td::before {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.6875rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: var(--color-zinc-500);
+        }
+
+        > td[wire\:key='column-filter-total_venta_formated'],
+        > td[wire\:key='column-filter-diferencia_formated'],
+        > td[wire\:key='column-filter-acciones'] {
+            display: none;
+        }
+
+        > td[wire\:key='column-filter-fecha_venta_formatted']::before { content: 'Fecha de venta'; }
+        > td[wire\:key='column-filter-sucursal_id']::before { content: 'Sucursal'; }
+        > td[wire\:key='column-filter-status_cuenta_id']::before { content: 'Status'; }
+    }
+}
+
+[x-cloak] {
+    display: none !important;
+}

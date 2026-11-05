@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Cuenta;
 use App\Models\Entrada;
 use App\Models\Gasto;
@@ -156,12 +157,21 @@ new #[Title('Detalle de cuenta')] class extends Component {
         ];
     }
 
+    private function bitacora(string $accion): void
+    {
+        $fecha = Carbon::parse($this->cuenta->fecha_venta)->format('d/m/Y');
+        $sucursal = $this->cuenta->sucursal?->name ?? 'una sucursal';
+
+        ActivityLog::log("{$accion} en la cuenta del {$fecha} ({$sucursal})", $this->cuenta);
+    }
+
     // ---- Status ----
 
     public function guardarStatus(): void
     {
         try {
             $this->cuenta->update(['status_cuenta_id' => $this->statusId]);
+            $this->bitacora('cambió el status a "'.($this->cuenta->fresh('status_cuenta')->status_cuenta?->name ?? '—').'"');
             $this->reset(['openStatus', 'statusId']);
             Flux::toast(variant: 'success', text: 'Status actualizado correctamente.');
         } catch (\Throwable $e) {
@@ -190,6 +200,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
                     'diferencia' => $totalVenta - $totalCapturado,
                 ]);
             });
+            $this->bitacora('actualizó el efectivo entregado y la tarjeta');
             $this->reset(['openEfectivo', 'efectivoEntregado', 'tarjeta']);
             Flux::toast(variant: 'success', text: 'Efectivo y tarjeta actualizados correctamente.');
         } catch (\Throwable $e) {
@@ -298,6 +309,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             $this->recalcularTotales();
             $this->cuenta->load('salidas.producto', 'salidas.sucursalDestino');
+            $this->bitacora(($this->salidaEditId ? 'editó' : 'registró').' una salida de '.number_format($cantidad, 2).' de "'.($salida->producto?->name ?? 'producto').'"');
             $this->reset(['openSalida', 'salidaEditId', 'salidaForm']);
 
             Flux::toast(variant: 'success', text: 'Salida guardada con éxito.');
@@ -318,11 +330,14 @@ new #[Title('Detalle de cuenta')] class extends Component {
                 return;
             }
 
+            $nombreProducto = $salida->producto?->name ?? 'producto';
+
             Entrada::where('salida_id', $salidaId)->delete();
             $salida->delete();
 
             $this->recalcularTotales();
             $this->cuenta->load('salidas.producto', 'salidas.sucursalDestino');
+            $this->bitacora('eliminó una salida de "'.$nombreProducto.'"');
 
             Flux::toast(variant: 'success', text: 'Salida eliminada con éxito.');
         } catch (\Throwable $e) {
@@ -367,6 +382,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             $this->recalcularTotales();
             $this->cuenta->load('gastos');
+            $this->bitacora(($this->gastoEditId ? 'editó' : 'registró').' el gasto "'.($this->gastoForm['concepto'] ?? '').'" por $'.number_format((float) ($this->gastoForm['precio'] ?? 0), 2));
             $this->reset(['openGasto', 'gastoEditId', 'gastoForm']);
 
             Flux::toast(variant: 'success', text: 'Gasto guardado con éxito.');
@@ -389,6 +405,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
             $gasto->delete();
             $this->recalcularTotales();
             $this->cuenta->load('gastos');
+            $this->bitacora('eliminó el gasto "'.$gasto->concepto.'"');
 
             Flux::toast(variant: 'success', text: 'Gasto eliminado con éxito.');
         } catch (\Throwable $e) {
@@ -433,6 +450,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             $this->recalcularTotales();
             $this->cuenta->load('mermas');
+            $this->bitacora(($this->mermaEditId ? 'editó' : 'registró').' la merma "'.($this->mermaForm['concepto'] ?? '').'" por $'.number_format((float) ($this->mermaForm['precio'] ?? 0), 2));
             $this->reset(['openMerma', 'mermaEditId', 'mermaForm']);
 
             Flux::toast(variant: 'success', text: 'Merma guardada con éxito.');
@@ -455,6 +473,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
             $merma->delete();
             $this->recalcularTotales();
             $this->cuenta->load('mermas');
+            $this->bitacora('eliminó la merma "'.$merma->concepto.'"');
 
             Flux::toast(variant: 'success', text: 'Merma eliminada con éxito.');
         } catch (\Throwable $e) {
@@ -525,6 +544,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             $this->recalcularTotales();
             $this->cuenta->load('itemsCuenta.producto');
+            $this->bitacora(($this->itemEditId ? 'editó' : 'registró').' el producto "'.(Producto::find($this->itemForm['productoId'])?->name ?? 'producto').'"');
             $this->reset(['openItem', 'itemEditId', 'itemForm']);
 
             Flux::toast(variant: 'success', text: 'Producto guardado con éxito.');
@@ -539,7 +559,11 @@ new #[Title('Detalle de cuenta')] class extends Component {
     public function eliminarCuenta()
     {
         try {
+            $fecha = Carbon::parse($this->cuenta->fecha_venta)->format('d/m/Y');
+            $sucursal = $this->cuenta->sucursal?->name ?? 'una sucursal';
+
             $this->cuenta->delete();
+            ActivityLog::log("eliminó la cuenta del {$fecha} ({$sucursal})", $this->cuenta);
             Flux::toast(variant: 'success', text: 'Cuenta eliminada con éxito.');
 
             return $this->redirectRoute('admin.cuentas.index', navigate: true);
@@ -556,422 +580,635 @@ new #[Title('Detalle de cuenta')] class extends Component {
 }; ?>
 
 <div class="space-y-6" x-data="{
+    tab: 'productos',
     q: '',
-    searchOnTable(e, tableId) {
+    searchOnTable(e, listId) {
         this.q = e.target.value.toLowerCase();
-        const rows = document.querySelectorAll(`#${tableId} tbody tr[data-search]`);
-        rows.forEach(row => {
-            row.style.display = row.dataset.search.includes(this.q) ? '' : 'none';
+        document.querySelectorAll(`#${listId} [data-search]`).forEach(el => {
+            el.style.display = el.dataset.search.includes(this.q) ? '' : 'none';
         });
     },
 }">
     @php
         $statusMeta = match ($cuenta->status_cuenta?->name) {
-            'PAGADO' => ['tone' => 'positive', 'icon' => 'check'],
-            'PAGO PARCIAL' => ['tone' => 'accent', 'icon' => 'exclamation-triangle'],
+            'PAGADO' => ['tone' => 'positive', 'icon' => 'check-circle'],
+            'PAGO PARCIAL' => ['tone' => 'accent', 'icon' => 'clock'],
             'PENDIENTE' => ['tone' => 'negative', 'icon' => 'exclamation-triangle'],
-            default => ['tone' => 'accent', 'icon' => 'exclamation-triangle'],
+            default => ['tone' => 'accent', 'icon' => 'question-mark-circle'],
         };
+
+        $th = 'bg-zinc-50 px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 border-b border-zinc-200/70 dark:bg-zinc-800 dark:border-zinc-700/70';
+        $tr = 'border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-white/5';
+        $td = 'px-4 py-3 text-zinc-900 dark:text-zinc-100';
+        $tarjetaMovil = 'border-b border-zinc-100 px-4 py-3.5 last:border-b-0 dark:border-zinc-800';
+
+        $importeEntradas = (float) $cuenta->itemsCuenta->sum('importe_entrada');
+        $totalSalidas = (float) $cuenta->salidas->sum('total');
+        $totalGastos = (float) $cuenta->gastos->sum('precio');
+        $totalMermas = (float) $cuenta->mermas->sum('precio');
+        $totalEntradasOtras = (float) $cuenta->entradas->sum('total');
+        $disponible = abs((float) $totalExistencia + $importeEntradas);
+
+        $diferencia = (float) $cuenta->diferencia;
+        $hayFaltante = $diferencia > 0.005;
+        $haySobrante = $diferencia < -0.005;
+        $cobrado = (float) $cuenta->efectivo_entregado + (float) $cuenta->tarjeta;
+
+        $itemsVisibles = $cuenta->itemsCuenta->filter(fn ($item) => $item->precio != 0 || $item->cantidad_existencia != 0 || $item->importe_existencia != 0 || $item->cantidad_entrada != 0 || $item->importe_entrada != 0 || $item->cantidad_salida != 0 || $item->importe_salida != 0 || $item->cantidad_sobrante != 0 || $item->importe_sobrante != 0);
+
+        $pestanas = [
+            ['clave' => 'productos', 'etiqueta' => 'Productos', 'icono' => 'cube', 'total' => $itemsVisibles->count()],
+            ['clave' => 'entradas', 'etiqueta' => 'Entradas', 'icono' => 'arrow-down-tray', 'total' => $cuenta->entradas->count()],
+            ['clave' => 'salidas', 'etiqueta' => 'Salidas', 'icono' => 'arrow-up-tray', 'total' => $cuenta->salidas->count()],
+            ['clave' => 'gastos', 'etiqueta' => 'Gastos', 'icono' => 'credit-card', 'total' => $cuenta->gastos->count()],
+            ['clave' => 'mermas', 'etiqueta' => 'Mermas', 'icono' => 'trash', 'total' => $cuenta->mermas->count()],
+        ];
     @endphp
 
     {{-- ENCABEZADO --}}
-    <div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-6">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-            <div>
-                <div class="flex items-center flex-wrap gap-3 mb-1">
-                    <h1 class="text-2xl font-extrabold text-zinc-900 dark:text-zinc-100">{{ $cuenta->sucursal?->name }}</h1>
-                    <span
-                        @class([
-                            'inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold cursor-pointer',
-                            'bg-negative-soft text-negative' => $statusMeta['tone'] === 'negative',
-                            'bg-accent-soft text-accent' => $statusMeta['tone'] === 'accent',
-                            'bg-positive-soft text-positive' => $statusMeta['tone'] === 'positive',
-                        ])
-                        wire:click="$set('openStatus', true)"
-                    >
-                        <flux:icon :name="$statusMeta['icon']" class="w-3.5 h-3.5" />
-                        {{ strtoupper($cuenta->status_cuenta?->name ?? 'SIN STATUS') }}
-                    </span>
-                </div>
-                <div class="flex gap-8 mt-4">
-                    <div>
-                        <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400">Fecha de venta</div>
-                        <div class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ \Carbon\Carbon::parse($cuenta->fecha_venta)->format('d-m-Y') }}</div>
-                    </div>
-                    <div>
-                        <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400">Fecha de captura</div>
-                        <div class="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{{ \Carbon\Carbon::parse($cuenta->fecha_captura)->format('d-m-Y') }}</div>
+    <div>
+        <flux:button size="sm" variant="subtle" icon="arrow-left" :href="route('admin.cuentas.index')" wire:navigate>Cuentas</flux:button>
+    </div>
+
+    <div class="rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-sm shadow-zinc-900/5 sm:p-6 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+        <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-4">
+            <div class="flex min-w-0 items-center gap-4">
+                <span class="flex size-14 flex-none items-center justify-center rounded-2xl bg-accent-soft text-accent-content">
+                    <flux:icon name="building-storefront" class="size-7" />
+                </span>
+                <div class="min-w-0">
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Cuenta de venta</div>
+                    <h1 class="text-2xl font-semibold tracking-tight text-zinc-900 sm:text-3xl dark:text-white">{{ $cuenta->sucursal?->name }}</h1>
+                    <div class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-sm text-zinc-500 dark:text-zinc-400">
+                        <span class="inline-flex items-center gap-1.5">
+                            <flux:icon name="calendar-days" class="size-4" />
+                            Venta del <strong class="font-semibold text-zinc-900 dark:text-zinc-100">{{ \Carbon\Carbon::parse($cuenta->fecha_venta)->format('d/m/Y') }}</strong>
+                        </span>
+                        <span class="inline-flex items-center gap-1.5">
+                            <flux:icon name="pencil-square" class="size-4" />
+                            Capturada el <strong class="font-semibold text-zinc-900 dark:text-zinc-100">{{ \Carbon\Carbon::parse($cuenta->fecha_captura)->format('d/m/Y') }}</strong>
+                        </span>
                     </div>
                 </div>
             </div>
 
-            <div class="flex gap-2 flex-wrap">
-                <flux:button variant="ghost" wire:click="$set('openStatus', true)">Cambiar status</flux:button>
-                <flux:button variant="ghost" wire:click="abrirEfectivo">Actualizar efectivo</flux:button>
-                <flux:button icon="pencil-square" :href="route('admin.registrar.index', ['cuenta' => $cuenta->id])" wire:navigate>Editar cuenta</flux:button>
-                <flux:button icon="arrow-down-tray" :href="route('admin.cuentas.pdf', $cuenta)" target="_blank">PDF</flux:button>
-                <flux:button
-                    type="button"
-                    variant="danger"
-                    icon="trash"
-                    x-on:click.prevent="
-                        Swal.fire({
-                            icon: 'question',
-                            title: '¿Estás seguro de eliminar la cuenta?',
-                            text: 'Una vez eliminada no se podrá recuperar.',
-                            showDenyButton: true,
-                            confirmButtonText: 'Eliminar',
-                            denyButtonText: 'No eliminar',
-                        }).then((result) => {
-                            if (result.isConfirmed) {
-                                $wire.eliminarCuenta().catch((error) => {
-                                    Swal.fire({
-                                        icon: 'error',
-                                        title: 'Error al eliminar',
-                                        text: error.message || 'Ocurrió un problema al intentar eliminar la cuenta.',
-                                        showConfirmButton: true,
-                                    });
+            <button
+                type="button"
+                wire:click="$set('openStatus', true)"
+                title="Cambiar status"
+                aria-label="Cambiar status"
+                @class([
+                    'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition hover:brightness-95',
+                    'bg-negative-soft text-negative' => $statusMeta['tone'] === 'negative',
+                    'bg-accent-soft text-accent-content' => $statusMeta['tone'] === 'accent',
+                    'bg-positive-soft text-positive' => $statusMeta['tone'] === 'positive',
+                ])
+            >
+                <flux:icon :name="$statusMeta['icon']" class="size-4" />
+                {{ strtoupper($cuenta->status_cuenta?->name ?? 'SIN STATUS') }}
+                <flux:icon name="chevron-down" class="size-3.5 opacity-60" />
+            </button>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+            <flux:button variant="primary" icon="pencil-square" :href="route('admin.registrar.index', ['cuenta' => $cuenta->id])" wire:navigate>Editar cuenta</flux:button>
+            <flux:button icon="banknotes" wire:click="abrirEfectivo">Actualizar efectivo</flux:button>
+            <flux:button icon="arrow-down-tray" :href="route('admin.cuentas.pdf', $cuenta)" target="_blank">PDF</flux:button>
+            <flux:button
+                type="button"
+                variant="ghost"
+                icon="trash"
+                class="ms-auto !text-negative"
+                x-on:click.prevent="
+                    Swal.fire({
+                        icon: 'question',
+                        title: '¿Estás seguro de eliminar la cuenta?',
+                        text: 'Una vez eliminada no se podrá recuperar.',
+                        showDenyButton: true,
+                        confirmButtonText: 'Eliminar',
+                        denyButtonText: 'No eliminar',
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            $wire.eliminarCuenta().catch((error) => {
+                                Swal.fire({
+                                    icon: 'error',
+                                    title: 'Error al eliminar',
+                                    text: error.message || 'Ocurrió un problema al intentar eliminar la cuenta.',
+                                    showConfirmButton: true,
                                 });
-                            }
-                        })
-                    "
-                >Eliminar cuenta</flux:button>
-            </div>
+                            });
+                        }
+                    })
+                "
+            >Eliminar cuenta</flux:button>
         </div>
     </div>
 
-    {{-- RESUMEN FINANCIERO --}}
-    <div class="grid grid-cols-1 lg:grid-cols-[340px_1fr] gap-6 items-start">
-        <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-5 py-4">
-            <div class="text-center mb-2">
-                <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Resumen financiero</div>
+    {{-- RESUMEN --}}
+    <div class="grid grid-cols-1 items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+        <div class="rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+            <h2 class="text-base font-semibold tracking-tight text-zinc-900 dark:text-white">¿Cómo se calculó la venta?</h2>
+            <p class="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">Producto disponible menos lo que salió o no se vendió.</p>
+
+            <div class="mt-4 space-y-1 text-sm">
+                @foreach ([
+                    ['Existencia del día anterior', 'archive-box', $totalExistencia, '+'],
+                    ['Entradas del día', 'arrow-down-tray', $importeEntradas, '+'],
+                ] as [$etiqueta, $icono, $valor, $signo])
+                    <div class="flex items-center gap-3 py-1.5">
+                        <span class="flex size-8 flex-none items-center justify-center rounded-lg bg-positive/10 text-positive"><flux:icon :name="$icono" class="size-4" /></span>
+                        <span class="flex-1 text-zinc-600 dark:text-zinc-300">{{ $etiqueta }}</span>
+                        <span class="font-semibold tabular-nums text-positive">+ ${{ $this->formatearImporte($valor) }}</span>
+                    </div>
+                @endforeach
+
+                <div class="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2 dark:bg-white/5">
+                    <span class="font-medium text-zinc-700 dark:text-zinc-200">Producto disponible</span>
+                    <span class="font-semibold tabular-nums text-zinc-900 dark:text-white">${{ $this->formatearImporte($disponible) }}</span>
+                </div>
+
+                @foreach ([
+                    ['Salidas a otra sucursal', 'arrow-up-tray', $totalSalidas],
+                    ['Gastos', 'credit-card', $totalGastos],
+                    ['Mermas', 'trash', $totalMermas],
+                    ['Sobrante', 'cube', (float) $cuenta->sobrante],
+                ] as [$etiqueta, $icono, $valor])
+                    <div class="flex items-center gap-3 py-1.5">
+                        <span class="flex size-8 flex-none items-center justify-center rounded-lg bg-negative/10 text-negative"><flux:icon :name="$icono" class="size-4" /></span>
+                        <span class="flex-1 text-zinc-600 dark:text-zinc-300">{{ $etiqueta }}</span>
+                        <span class="font-semibold tabular-nums text-negative">− ${{ $this->formatearImporte($valor) }}</span>
+                    </div>
+                @endforeach
             </div>
-            <div class="divide-y divide-dashed divide-zinc-200 dark:divide-white/10 text-[13px]">
-                <div class="flex justify-between items-baseline py-[7px]">
-                    <span class="text-zinc-900 dark:text-zinc-100">Existencia</span>
-                    <span class="tabular-nums font-semibold text-positive">+ ${{ $this->formatearImporte($totalExistencia) }}</span>
-                </div>
-                <div class="flex justify-between items-baseline py-[7px]">
-                    <span class="text-zinc-900 dark:text-zinc-100">Entradas</span>
-                    <span class="tabular-nums font-semibold text-positive">+ ${{ $this->formatearImporte($cuenta->itemsCuenta->sum('importe_entrada')) }}</span>
-                </div>
-                <div class="flex justify-between items-baseline py-[7px]">
-                    <span class="text-zinc-900 dark:text-zinc-100">Salidas</span>
-                    <span class="tabular-nums font-semibold text-negative">− ${{ $this->formatearImporte($cuenta->salidas->sum('total')) }}</span>
-                </div>
-                <div class="flex justify-between items-baseline py-[7px]">
-                    <span class="text-zinc-900 dark:text-zinc-100">Gastos</span>
-                    <span class="tabular-nums font-semibold text-negative">− ${{ $this->formatearImporte($cuenta->gastos->sum('precio')) }}</span>
-                </div>
-                <div class="flex justify-between items-baseline py-[7px]">
-                    <span class="text-zinc-900 dark:text-zinc-100">Merma</span>
-                    <span class="tabular-nums font-semibold text-negative">− ${{ $this->formatearImporte($cuenta->mermas->sum('precio')) }}</span>
-                </div>
-                <div class="flex justify-between items-baseline py-[7px]">
-                    <span class="text-zinc-900 dark:text-zinc-100">Sobrante</span>
-                    <span class="tabular-nums font-semibold text-negative">− ${{ $this->formatearImporte($cuenta->sobrante) }}</span>
-                </div>
-            </div>
-            <div class="flex justify-between items-baseline pt-3 mt-1 border-t border-zinc-300 dark:border-zinc-600">
-                <span class="font-bold text-[14px] text-zinc-900 dark:text-zinc-100">Total venta</span>
-                <span @class(['font-extrabold text-[22px] tabular-nums', 'text-negative' => $cuenta->total_venta < 0, 'text-zinc-900 dark:text-zinc-100' => $cuenta->total_venta >= 0])>
-                    {{ $cuenta->total_venta < 0 ? '-' : '' }}${{ number_format(abs($cuenta->total_venta), 2) }}
-                </span>
+
+            <div class="mt-3 flex items-baseline justify-between rounded-xl bg-accent-soft px-4 py-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-accent-content">Total venta</span>
+                <span class="text-lg font-bold tabular-nums text-accent-content">{{ $cuenta->total_venta < 0 ? '-' : '' }}${{ number_format(abs($cuenta->total_venta), 2) }}</span>
             </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 min-w-0">
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="abrirEfectivo">
-                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Pollo</div>
-                <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->efectivo_pollo, 2) }}</div>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5">
-                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Marinado</div>
-                <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->efectivo_marinado, 2) }}</div>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="abrirEfectivo">
-                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Efectivo entregado</div>
-                <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->efectivo_entregado, 2) }}</div>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3.5 cursor-pointer" wire:click="abrirEfectivo">
-                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400 mb-1">Tarjeta</div>
-                <div class="text-lg font-extrabold text-zinc-900 dark:text-zinc-100 tabular-nums">${{ number_format($cuenta->tarjeta, 2) }}</div>
-            </div>
-            <div @class([
-                'rounded-lg px-4 py-3.5 border',
-                'bg-negative-soft border-negative-soft' => $cuenta->diferencia > 0,
-                'bg-positive-soft border-positive-soft' => $cuenta->diferencia <= 0,
-            ])>
+        <div class="grid min-w-0 gap-4">
+            <div class="grid gap-4 sm:grid-cols-2">
+                <x-stat-card label="Total venta" icon="banknotes" tone="brand" size="lg">
+                    {{ $cuenta->total_venta < 0 ? '-' : '' }}${{ number_format(abs($cuenta->total_venta), 2) }}
+                    <x-slot:footer>Lo que debió cobrarse en el día</x-slot:footer>
+                </x-stat-card>
+
                 <div @class([
-                    'text-[10.5px] font-bold uppercase tracking-wide mb-1',
-                    'text-negative' => $cuenta->diferencia > 0,
-                    'text-positive' => $cuenta->diferencia <= 0,
-                ])>Diferencia</div>
-                <div @class([
-                    'text-lg font-extrabold tabular-nums',
-                    'text-negative' => $cuenta->diferencia > 0,
-                    'text-positive' => $cuenta->diferencia <= 0,
-                ])>${{ number_format($cuenta->diferencia, 2) }}</div>
+                    '@container rounded-2xl border p-4 sm:p-5',
+                    'border-negative/20 bg-negative-soft' => $hayFaltante,
+                    'border-positive/20 bg-positive-soft' => ! $hayFaltante,
+                ])>
+                    <div class="flex items-center gap-4">
+                        <span @class([
+                            'hidden size-12 flex-none items-center justify-center rounded-xl @[12rem]:flex',
+                            'bg-negative/15 text-negative' => $hayFaltante,
+                            'bg-positive/15 text-positive' => ! $hayFaltante,
+                        ])>
+                            <flux:icon :name="$hayFaltante ? 'exclamation-triangle' : 'check-circle'" class="size-6" />
+                        </span>
+                        <div class="min-w-0 flex-1">
+                            <div @class(['text-[11px] leading-tight font-medium uppercase tracking-wide', 'text-negative' => $hayFaltante, 'text-positive' => ! $hayFaltante])>
+                                {{ $hayFaltante ? 'Faltante' : ($haySobrante ? 'Sobrante en caja' : 'Cuenta cuadrada') }}
+                            </div>
+                            <div @class(['mt-0.5 text-2xl font-bold leading-tight tracking-tight tabular-nums @[15rem]:text-3xl @[19rem]:text-4xl', 'text-negative' => $hayFaltante, 'text-positive' => ! $hayFaltante])>
+                                {{ $diferencia < 0 ? '-' : '' }}${{ number_format(abs($diferencia), 2) }}
+                            </div>
+                            <div class="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
+                                Cobrado ${{ number_format($cobrado, 2) }} de ${{ number_format($cuenta->total_venta, 2) }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 xl:grid-cols-4">
+                <x-stat-card label="Efectivo entregado" icon="banknotes" class="cursor-pointer" wire:click="abrirEfectivo">
+                    ${{ number_format($cuenta->efectivo_entregado, 2) }}
+                </x-stat-card>
+                <x-stat-card label="Tarjeta" icon="credit-card" class="cursor-pointer" wire:click="abrirEfectivo">
+                    ${{ number_format($cuenta->tarjeta, 2) }}
+                </x-stat-card>
+                <x-stat-card label="Pollo" icon="currency-dollar">
+                    ${{ number_format($cuenta->efectivo_pollo, 2) }}
+                </x-stat-card>
+                <x-stat-card label="Marinado" icon="shopping-bag">
+                    ${{ number_format($cuenta->efectivo_marinado, 2) }}
+                </x-stat-card>
+            </div>
+
+            @php
+                $baseCobro = max((float) $cuenta->total_venta, $cobrado, 0.01);
+                $pctEfectivo = min(100, max(0, (float) $cuenta->efectivo_entregado / $baseCobro * 100));
+                $pctTarjeta = min(100 - $pctEfectivo, max(0, (float) $cuenta->tarjeta / $baseCobro * 100));
+                $pctCobrado = (float) $cuenta->total_venta > 0 ? min(100, (int) floor($cobrado / (float) $cuenta->total_venta * 100)) : 0;
+            @endphp
+
+            <div class="rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+                <div class="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 class="text-base font-semibold tracking-tight text-zinc-900 dark:text-white">Cobro de la venta</h2>
+                    <span class="text-sm text-zinc-500 dark:text-zinc-400">
+                        @if ($hayFaltante)
+                            Faltan por cobrar <strong class="font-semibold text-negative">${{ number_format($diferencia, 2) }}</strong>
+                        @elseif ($haySobrante)
+                            Se cobraron <strong class="font-semibold text-positive">${{ number_format(abs($diferencia), 2) }}</strong> de más
+                        @else
+                            <strong class="font-semibold text-positive">Cobro completo</strong>
+                        @endif
+                    </span>
+                </div>
+
+                <div class="mt-4 flex h-3 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-white/10" role="img" aria-label="Se ha cobrado el {{ $pctCobrado }}% de la venta">
+                    <div class="h-full bg-accent" style="width: {{ $pctEfectivo }}%"></div>
+                    <div class="h-full bg-accent/45" style="width: {{ $pctTarjeta }}%"></div>
+                </div>
+
+                <div class="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm text-zinc-600 dark:text-zinc-300">
+                    <span class="inline-flex items-center gap-2"><span class="size-2.5 rounded-full bg-accent"></span>Efectivo ${{ number_format($cuenta->efectivo_entregado, 2) }}</span>
+                    <span class="inline-flex items-center gap-2"><span class="size-2.5 rounded-full bg-accent/45"></span>Tarjeta ${{ number_format($cuenta->tarjeta, 2) }}</span>
+                    <span class="ms-auto font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $pctCobrado }}% cobrado</span>
+                </div>
             </div>
         </div>
     </div>
 
     {{-- DETALLE --}}
-    <div class="flex items-center gap-2">
-        <span class="w-[26px] h-[26px] rounded bg-accent-soft text-accent flex items-center justify-center flex-none">
-            <flux:icon name="ticket" class="w-3.5 h-3.5" />
-        </span>
-        <h2 class="text-[15px] font-extrabold text-zinc-900 dark:text-zinc-100">Detalle de la cuenta</h2>
+    <x-page-header class="pt-2" icon="clipboard-document-list" title="Detalle de la cuenta" subtitle="Todo lo que se registró en esta cuenta, separado por tipo." />
+
+    <div class="-mx-1 overflow-x-auto px-1 pb-1">
+        <div class="inline-flex gap-1 rounded-xl bg-zinc-200/60 p-1 dark:bg-white/10" role="tablist">
+            @foreach ($pestanas as $pestana)
+                <button
+                    type="button"
+                    role="tab"
+                    x-on:click="tab = '{{ $pestana['clave'] }}'"
+                    x-bind:aria-selected="tab === '{{ $pestana['clave'] }}'"
+                    x-bind:class="tab === '{{ $pestana['clave'] }}' ? 'bg-white text-accent-content shadow-sm dark:bg-zinc-900' : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white'"
+                    class="inline-flex items-center gap-2 whitespace-nowrap rounded-lg px-3.5 py-1.5 text-sm font-medium transition"
+                >
+                    <flux:icon :name="$pestana['icono']" class="hidden size-4 sm:block" />
+                    {{ $pestana['etiqueta'] }}
+                    <span class="rounded-full bg-zinc-900/5 px-1.5 text-[11px] font-semibold tabular-nums dark:bg-white/10">{{ $pestana['total'] }}</span>
+                </button>
+            @endforeach
+        </div>
     </div>
 
-    <div class="space-y-8">
-        {{-- Entradas --}}
-        <section>
-            <h3 class="text-[13px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2">Entradas de otra sucursal</h3>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-                <div class="max-h-96 overflow-y-auto overflow-x-auto">
-                    <table class="table-fixed w-full text-[13.5px] text-left min-w-[640px]">
-                        <thead>
-                            <tr class="sticky top-0 z-10">
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 w-1/3">Producto</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 w-1/3">Sucursal origen</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right w-1/6">Precio</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right w-1/6">Cantidad</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right w-1/6">Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($cuenta->entradas as $entrada)
-                                <tr wire:key="entrada-{{ $entrada->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                    <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap" title="{{ $entrada->producto?->name }}">{{ $entrada->producto?->name }}</td>
-                                    <td class="px-4 py-2 text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap" title="{{ $entrada->sucursalOrigen?->name }}">{{ $entrada->sucursalOrigen?->name }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ number_format($entrada->precio_envio, 2) }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $entrada->cantidad }} kg</td>
-                                    <td class="px-4 py-2 text-right tabular-nums font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ number_format($entrada->total, 2) }}</td>
-                                </tr>
-                            @empty
-                                <tr><td class="text-center text-zinc-400 text-sm py-10" colspan="5">No hay datos para mostrar</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                <div class="flex justify-end items-baseline gap-2 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900">
-                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Total</span>
-                    <span class="text-sm font-bold text-accent tabular-nums">${{ number_format($cuenta->entradas->sum('total'), 2) }}</span>
-                </div>
-            </div>
-        </section>
-
-        {{-- Salidas --}}
-        <section>
-            <h3 class="text-[13px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2">Salidas a otra sucursal</h3>
-            <div class="flex justify-end mb-3">
-                <flux:button size="sm" icon="plus" wire:click="abrirSalida">Agregar salida</flux:button>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-                <div class="max-h-96 overflow-y-auto overflow-x-auto">
-                    <table class="table-fixed w-full text-[13.5px] text-left min-w-[720px]">
-                        <thead>
-                            <tr class="sticky top-0 z-10">
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 w-1/3">Producto</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Sucursal destino</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Precio</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Cantidad</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Total</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($cuenta->salidas as $salida)
-                                <tr wire:key="salida-{{ $salida->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                    <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap" title="{{ $salida->producto?->name }}">{{ $salida->producto?->name }}</td>
-                                    <td class="px-4 py-2 text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap" title="{{ $salida->sucursalDestino?->name }}">{{ $salida->sucursalDestino?->name }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ number_format($salida->precio, 2) }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $salida->cantidad }} kg</td>
-                                    <td class="px-4 py-2 text-right tabular-nums font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ number_format($salida->total, 2) }}</td>
-                                    <td class="px-4 py-2 whitespace-nowrap">
-                                        <div class="flex gap-1.5">
-                                            <flux:button size="sm" variant="ghost" wire:click="abrirSalida({{ $salida->id }})">Editar</flux:button>
-                                            <flux:button size="sm" variant="ghost" class="!text-negative" wire:click="eliminarSalida({{ $salida->id }})" wire:confirm="¿Eliminar esta salida?">Eliminar</flux:button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr><td class="text-center text-zinc-400 text-sm py-10" colspan="6">No hay datos para mostrar</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                <div class="flex justify-end items-baseline gap-2 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900">
-                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Total</span>
-                    <span class="text-sm font-bold text-accent tabular-nums">${{ number_format($cuenta->salidas->sum('total'), 2) }}</span>
-                </div>
-            </div>
-        </section>
-
-        {{-- Gastos --}}
-        <section>
-            <h3 class="text-[13px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2">Gastos</h3>
-            <div class="flex justify-end mb-3">
-                <flux:button size="sm" icon="plus" wire:click="abrirGasto">Agregar gasto</flux:button>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-                <div class="max-h-96 overflow-y-auto overflow-x-auto">
-                    <table class="table-fixed w-full text-[13.5px] text-left min-w-[480px]">
-                        <thead>
-                            <tr class="sticky top-0 z-10">
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 w-1/2">Concepto</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Precio</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($cuenta->gastos as $gasto)
-                                <tr wire:key="gasto-{{ $gasto->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                    <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap">{{ $gasto->concepto }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ number_format($gasto->precio, 2) }}</td>
-                                    <td class="px-4 py-2 whitespace-nowrap">
-                                        <div class="flex gap-1.5">
-                                            <flux:button size="sm" variant="ghost" wire:click="abrirGasto({{ $gasto->id }})">Editar</flux:button>
-                                            <flux:button size="sm" variant="ghost" class="!text-negative" wire:click="eliminarGasto({{ $gasto->id }})" wire:confirm="¿Eliminar este gasto?">Eliminar</flux:button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr><td class="text-center text-zinc-400 text-sm py-10" colspan="3">No hay datos para mostrar</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                <div class="flex justify-end items-baseline gap-2 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900">
-                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Total</span>
-                    <span class="text-sm font-bold text-accent tabular-nums">${{ number_format($cuenta->gastos->sum('precio'), 2) }}</span>
-                </div>
-            </div>
-        </section>
-
-        {{-- Mermas --}}
-        <section>
-            <h3 class="text-[13px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2">Mermas</h3>
-            <div class="flex justify-end mb-3">
-                <flux:button size="sm" icon="plus" wire:click="abrirMerma">Agregar merma</flux:button>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-                <div class="max-h-96 overflow-y-auto overflow-x-auto">
-                    <table class="table-fixed w-full text-[13.5px] text-left min-w-[480px]">
-                        <thead>
-                            <tr class="sticky top-0 z-10">
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 w-1/2">Concepto</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Precio</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($cuenta->mermas as $merma)
-                                <tr wire:key="merma-{{ $merma->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                    <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap">{{ $merma->concepto }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ number_format($merma->precio, 2) }}</td>
-                                    <td class="px-4 py-2 whitespace-nowrap">
-                                        <div class="flex gap-1.5">
-                                            <flux:button size="sm" variant="ghost" wire:click="abrirMerma({{ $merma->id }})">Editar</flux:button>
-                                            <flux:button size="sm" variant="ghost" class="!text-negative" wire:click="eliminarMerma({{ $merma->id }})" wire:confirm="¿Eliminar esta merma?">Eliminar</flux:button>
-                                        </div>
-                                    </td>
-                                </tr>
-                            @empty
-                                <tr><td class="text-center text-zinc-400 text-sm py-10" colspan="3">No hay datos para mostrar</td></tr>
-                            @endforelse
-                        </tbody>
-                    </table>
-                </div>
-                <div class="flex justify-end items-baseline gap-2 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900">
-                    <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Total</span>
-                    <span class="text-sm font-bold text-accent tabular-nums">${{ number_format($cuenta->mermas->sum('precio'), 2) }}</span>
-                </div>
-            </div>
-        </section>
-
-        {{-- Productos --}}
-        <section>
-            <div class="flex items-center justify-between flex-wrap gap-3 mb-2">
-                <h3 class="text-[13px] font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">Productos</h3>
-            </div>
-            <div class="flex justify-between items-center gap-3 mb-3">
-                <div class="relative w-full sm:w-96">
-                    <flux:icon name="magnifying-glass" class="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <input type="text" placeholder="Buscar producto…"
-                        class="w-full border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 rounded pl-8 pr-3 py-2 text-[13px] text-zinc-900 dark:text-zinc-100 focus:outline-none focus:border-accent"
-                        @input="searchOnTable($event, 'productos-table')" />
-                </div>
+    {{-- Productos --}}
+    <div x-show="tab === 'productos'" x-cloak role="tabpanel">
+        <x-detalle-panel
+            icon="cube"
+            title="Productos"
+            subtitle="Existencia, entradas y sobrante de cada producto."
+            :totales="[
+                'Existencia' => '$'.number_format($cuenta->itemsCuenta->sum('importe_existencia'), 2),
+                'Entrada' => '$'.number_format($importeEntradas, 2),
+                'Sobrante' => '$'.number_format($cuenta->itemsCuenta->sum('importe_sobrante'), 2),
+            ]"
+        >
+            <x-slot:action>
                 <flux:button size="sm" icon="plus" wire:click="abrirItem">Agregar producto</flux:button>
-            </div>
-            <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-                <div id="productos-table" class="max-h-96 overflow-y-auto overflow-x-auto">
-                    <table class="table-fixed w-full text-[13.5px] text-left min-w-[960px]">
+            </x-slot:action>
+
+            @if ($itemsVisibles->isEmpty())
+                <x-empty-state icon="cube" title="Todavía no hay productos" hint="Agrega los productos con su existencia, entrada y sobrante para calcular la venta." />
+            @else
+                <div class="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+                    <div class="relative w-full sm:max-w-sm">
+                        <flux:icon name="magnifying-glass" class="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar producto…"
+                            class="w-full rounded-lg border border-zinc-200 bg-white py-2 pl-9 pr-3 text-sm text-zinc-900 focus:border-accent focus:outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                            x-on:input="searchOnTable($event, 'productos-lista')"
+                        />
+                    </div>
+                </div>
+
+                <div id="productos-lista" class="max-h-[32rem] overflow-y-auto">
+                    <table class="hidden w-full text-left text-[13.5px] md:table">
                         <thead>
                             <tr class="sticky top-0 z-10">
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 w-1/6">Producto</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Precio</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Cant. existencia</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Importe existencia</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Cant. entrada</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Importe entrada</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Cant. sobrante</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-right">Importe sobrante</th>
-                                <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Acciones</th>
+                                <th class="{{ $th }}">Producto</th>
+                                <th class="{{ $th }} text-right">Precio</th>
+                                <th class="{{ $th }} text-right">Existencia</th>
+                                <th class="{{ $th }} text-right">Entrada</th>
+                                <th class="{{ $th }} text-right">Sobrante</th>
+                                <th class="{{ $th }} w-16"><span class="sr-only">Acciones</span></th>
                             </tr>
                         </thead>
                         <tbody>
-                            @php $itemsVisibles = $cuenta->itemsCuenta->filter(fn ($item) => $item->precio != 0 || $item->cantidad_existencia != 0 || $item->importe_existencia != 0 || $item->cantidad_entrada != 0 || $item->importe_entrada != 0 || $item->cantidad_salida != 0 || $item->importe_salida != 0 || $item->cantidad_sobrante != 0 || $item->importe_sobrante != 0); @endphp
-                            @forelse ($itemsVisibles as $item)
-                                <tr wire:key="item-{{ $item->id }}" data-search="{{ \Illuminate\Support\Str::lower($item->producto?->name) }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                    <td class="px-4 py-2 font-semibold text-zinc-900 dark:text-zinc-100 overflow-hidden text-ellipsis whitespace-nowrap" title="{{ $item->producto?->name }}">{{ $item->producto?->name }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ $this->formatearImporte($item->precio) }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $this->formatearImporte($item->cantidad_existencia) }} kg</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ $this->formatearImporte($item->importe_existencia) }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $this->formatearImporte($item->cantidad_entrada) }} kg</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ $this->formatearImporte($item->importe_entrada) }}</td>
-                                    <td class="px-4 py-2 text-right tabular-nums text-zinc-900 dark:text-zinc-100 whitespace-nowrap">{{ $this->formatearImporte($item->cantidad_sobrante) }} kg</td>
-                                    <td class="px-4 py-2 text-right tabular-nums font-semibold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">${{ $this->formatearImporte($item->importe_sobrante) }}</td>
-                                    <td class="px-4 py-2 whitespace-nowrap">
-                                        <flux:button size="sm" color="purple" variant="ghost" wire:click="abrirItem({{ $item->id }})">Editar</flux:button>
+                            @foreach ($itemsVisibles as $item)
+                                <tr wire:key="item-{{ $item->id }}" data-search="{{ \Illuminate\Support\Str::lower($item->producto?->name) }}" class="{{ $tr }}">
+                                    <td class="{{ $td }} font-semibold">{{ $item->producto?->name }}</td>
+                                    <td class="{{ $td }} text-right tabular-nums">${{ $this->formatearImporte($item->precio) }}</td>
+                                    <td class="{{ $td }} text-right tabular-nums">
+                                        <div>{{ $this->formatearImporte($item->cantidad_existencia) }} kg</div>
+                                        <div class="text-xs text-zinc-500">${{ $this->formatearImporte($item->importe_existencia) }}</div>
+                                    </td>
+                                    <td class="{{ $td }} text-right tabular-nums">
+                                        <div>{{ $this->formatearImporte($item->cantidad_entrada) }} kg</div>
+                                        <div class="text-xs text-zinc-500">${{ $this->formatearImporte($item->importe_entrada) }}</div>
+                                    </td>
+                                    <td class="{{ $td }} text-right tabular-nums">
+                                        <div>{{ $this->formatearImporte($item->cantidad_sobrante) }} kg</div>
+                                        <div class="text-xs text-zinc-500">${{ $this->formatearImporte($item->importe_sobrante) }}</div>
+                                    </td>
+                                    <td class="px-4 py-3 text-right">
+                                        <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar producto" wire:click="abrirItem({{ $item->id }})" />
                                     </td>
                                 </tr>
-                            @empty
-                                <tr><td class="text-center text-zinc-400 text-sm py-10" colspan="9">No hay datos para mostrar</td></tr>
-                            @endforelse
+                            @endforeach
                         </tbody>
                     </table>
+
+                    <div class="md:hidden">
+                        @foreach ($itemsVisibles as $item)
+                            <div wire:key="item-movil-{{ $item->id }}" data-search="{{ \Illuminate\Support\Str::lower($item->producto?->name) }}" class="{{ $tarjetaMovil }}">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="truncate font-semibold text-zinc-900 dark:text-white">{{ $item->producto?->name }}</div>
+                                        <div class="text-xs text-zinc-500">Precio ${{ $this->formatearImporte($item->precio) }}</div>
+                                    </div>
+                                    <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar producto" wire:click="abrirItem({{ $item->id }})" />
+                                </div>
+                                <div class="mt-2.5 grid grid-cols-3 gap-2 text-center">
+                                    @foreach ([
+                                        ['Existencia', $item->cantidad_existencia, $item->importe_existencia],
+                                        ['Entrada', $item->cantidad_entrada, $item->importe_entrada],
+                                        ['Sobrante', $item->cantidad_sobrante, $item->importe_sobrante],
+                                    ] as [$etiqueta, $kilos, $importe])
+                                        <div class="min-w-0 rounded-lg bg-zinc-50 px-1.5 py-2 dark:bg-white/5">
+                                            <div class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500">{{ $etiqueta }}</div>
+                                            <div class="mt-0.5 text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatearImporte($kilos) }} kg</div>
+                                            <div class="text-xs tabular-nums text-zinc-500">${{ $this->formatearImporte($importe) }}</div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
-                <div class="flex flex-wrap justify-end items-baseline gap-x-6 gap-y-1 px-4 py-2.5 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-sm">
-                    <span class="flex items-baseline gap-1.5">
-                        <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Existencia</span>
-                        <span class="font-bold text-accent tabular-nums">${{ number_format($cuenta->itemsCuenta->sum('importe_existencia'), 2) }}</span>
-                    </span>
-                    <span class="flex items-baseline gap-1.5">
-                        <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Entrada</span>
-                        <span class="font-bold text-accent tabular-nums">${{ number_format($cuenta->itemsCuenta->sum('importe_entrada'), 2) }}</span>
-                    </span>
-                    <span class="flex items-baseline gap-1.5">
-                        <span class="text-xs font-bold text-zinc-400 uppercase tracking-wide">Sobrante</span>
-                        <span class="font-bold text-accent tabular-nums">${{ number_format($cuenta->itemsCuenta->sum('importe_sobrante'), 2) }}</span>
-                    </span>
+            @endif
+        </x-detalle-panel>
+    </div>
+
+    {{-- Entradas --}}
+    <div x-show="tab === 'entradas'" x-cloak role="tabpanel">
+        <x-detalle-panel
+            icon="arrow-down-tray"
+            title="Entradas de otra sucursal"
+            subtitle="Producto que llegó desde otras sucursales."
+            :totales="$cuenta->entradas->isEmpty() ? [] : ['Total' => '$'.number_format($totalEntradasOtras, 2)]"
+        >
+            @if ($cuenta->entradas->isEmpty())
+                <x-empty-state icon="arrow-down-tray" title="Sin entradas de otras sucursales" hint="Cuando otra sucursal te envíe producto, aparecerá aquí automáticamente." />
+            @else
+                <div class="max-h-[32rem] overflow-y-auto">
+                    <table class="hidden w-full text-left text-[13.5px] md:table">
+                        <thead>
+                            <tr class="sticky top-0 z-10">
+                                <th class="{{ $th }}">Producto</th>
+                                <th class="{{ $th }}">Sucursal origen</th>
+                                <th class="{{ $th }} text-right">Precio</th>
+                                <th class="{{ $th }} text-right">Cantidad</th>
+                                <th class="{{ $th }} text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($cuenta->entradas as $entrada)
+                                <tr wire:key="entrada-{{ $entrada->id }}" class="{{ $tr }}">
+                                    <td class="{{ $td }} font-semibold">{{ $entrada->producto?->name }}</td>
+                                    <td class="{{ $td }}">{{ $entrada->sucursalOrigen?->name }}</td>
+                                    <td class="{{ $td }} text-right tabular-nums">${{ number_format($entrada->precio_envio, 2) }}</td>
+                                    <td class="{{ $td }} text-right tabular-nums">{{ $this->formatearImporte($entrada->cantidad) }} kg</td>
+                                    <td class="{{ $td }} text-right font-semibold tabular-nums">${{ number_format($entrada->total, 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    <div class="md:hidden">
+                        @foreach ($cuenta->entradas as $entrada)
+                            <div wire:key="entrada-movil-{{ $entrada->id }}" class="{{ $tarjetaMovil }}">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="truncate font-semibold text-zinc-900 dark:text-white">{{ $entrada->producto?->name }}</div>
+                                        <div class="text-xs text-zinc-500">Desde {{ $entrada->sucursalOrigen?->name }}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="font-semibold tabular-nums text-zinc-900 dark:text-white">${{ number_format($entrada->total, 2) }}</div>
+                                        <div class="text-xs tabular-nums text-zinc-500">{{ $this->formatearImporte($entrada->cantidad) }} kg × ${{ number_format($entrada->precio_envio, 2) }}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
-            </div>
-        </section>
+            @endif
+        </x-detalle-panel>
+    </div>
+
+    {{-- Salidas --}}
+    <div x-show="tab === 'salidas'" x-cloak role="tabpanel">
+        <x-detalle-panel
+            icon="arrow-up-tray"
+            title="Salidas a otra sucursal"
+            subtitle="Producto que se envió a otras sucursales."
+            :totales="$cuenta->salidas->isEmpty() ? [] : ['Total' => '$'.number_format($totalSalidas, 2)]"
+        >
+            <x-slot:action>
+                <flux:button size="sm" icon="plus" wire:click="abrirSalida">Agregar salida</flux:button>
+            </x-slot:action>
+
+            @if ($cuenta->salidas->isEmpty())
+                <x-empty-state icon="arrow-up-tray" title="Sin salidas registradas" hint="Registra aquí el producto que enviaste a otra sucursal; se descontará de la venta." />
+            @else
+                <div class="max-h-[32rem] overflow-y-auto">
+                    <table class="hidden w-full text-left text-[13.5px] md:table">
+                        <thead>
+                            <tr class="sticky top-0 z-10">
+                                <th class="{{ $th }}">Producto</th>
+                                <th class="{{ $th }}">Sucursal destino</th>
+                                <th class="{{ $th }} text-right">Precio</th>
+                                <th class="{{ $th }} text-right">Cantidad</th>
+                                <th class="{{ $th }} text-right">Total</th>
+                                <th class="{{ $th }} w-24"><span class="sr-only">Acciones</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($cuenta->salidas as $salida)
+                                <tr wire:key="salida-{{ $salida->id }}" class="{{ $tr }}">
+                                    <td class="{{ $td }} font-semibold">{{ $salida->producto?->name }}</td>
+                                    <td class="{{ $td }}">{{ $salida->sucursalDestino?->name }}</td>
+                                    <td class="{{ $td }} text-right tabular-nums">${{ number_format($salida->precio, 2) }}</td>
+                                    <td class="{{ $td }} text-right tabular-nums">{{ $this->formatearImporte($salida->cantidad) }} kg</td>
+                                    <td class="{{ $td }} text-right font-semibold tabular-nums">${{ number_format($salida->total, 2) }}</td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex justify-end gap-1">
+                                            <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar salida" wire:click="abrirSalida({{ $salida->id }})" />
+                                            <flux:button size="sm" variant="ghost" icon="trash" class="!text-negative" aria-label="Eliminar salida" wire:click="eliminarSalida({{ $salida->id }})" wire:confirm="¿Eliminar esta salida?" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    <div class="md:hidden">
+                        @foreach ($cuenta->salidas as $salida)
+                            <div wire:key="salida-movil-{{ $salida->id }}" class="{{ $tarjetaMovil }}">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div class="min-w-0">
+                                        <div class="truncate font-semibold text-zinc-900 dark:text-white">{{ $salida->producto?->name }}</div>
+                                        <div class="text-xs text-zinc-500">Hacia {{ $salida->sucursalDestino?->name }}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="font-semibold tabular-nums text-zinc-900 dark:text-white">${{ number_format($salida->total, 2) }}</div>
+                                        <div class="text-xs tabular-nums text-zinc-500">{{ $this->formatearImporte($salida->cantidad) }} kg × ${{ number_format($salida->precio, 2) }}</div>
+                                    </div>
+                                </div>
+                                <div class="mt-2 flex justify-end gap-1">
+                                    <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="abrirSalida({{ $salida->id }})">Editar</flux:button>
+                                    <flux:button size="sm" variant="ghost" icon="trash" class="!text-negative" wire:click="eliminarSalida({{ $salida->id }})" wire:confirm="¿Eliminar esta salida?">Eliminar</flux:button>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </x-detalle-panel>
+    </div>
+
+    {{-- Gastos --}}
+    <div x-show="tab === 'gastos'" x-cloak role="tabpanel">
+        <x-detalle-panel
+            icon="credit-card"
+            title="Gastos"
+            subtitle="Gastos del día descontados de la cuenta."
+            :totales="$cuenta->gastos->isEmpty() ? [] : ['Total' => '$'.number_format($totalGastos, 2)]"
+        >
+            <x-slot:action>
+                <flux:button size="sm" icon="plus" wire:click="abrirGasto">Agregar gasto</flux:button>
+            </x-slot:action>
+
+            @if ($cuenta->gastos->isEmpty())
+                <x-empty-state icon="credit-card" title="Sin gastos registrados" hint="Anota los gastos del día (gas, insumos, etc.) para descontarlos de la venta." />
+            @else
+                <div class="max-h-[32rem] overflow-y-auto">
+                    <table class="hidden w-full text-left text-[13.5px] md:table">
+                        <thead>
+                            <tr class="sticky top-0 z-10">
+                                <th class="{{ $th }}">Concepto</th>
+                                <th class="{{ $th }} text-right">Importe</th>
+                                <th class="{{ $th }} w-24"><span class="sr-only">Acciones</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($cuenta->gastos as $gasto)
+                                <tr wire:key="gasto-{{ $gasto->id }}" class="{{ $tr }}">
+                                    <td class="{{ $td }} font-semibold">{{ $gasto->concepto }}</td>
+                                    <td class="{{ $td }} text-right font-semibold tabular-nums">${{ number_format($gasto->precio, 2) }}</td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex justify-end gap-1">
+                                            <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar gasto" wire:click="abrirGasto({{ $gasto->id }})" />
+                                            <flux:button size="sm" variant="ghost" icon="trash" class="!text-negative" aria-label="Eliminar gasto" wire:click="eliminarGasto({{ $gasto->id }})" wire:confirm="¿Eliminar este gasto?" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    <div class="md:hidden">
+                        @foreach ($cuenta->gastos as $gasto)
+                            <div wire:key="gasto-movil-{{ $gasto->id }}" class="{{ $tarjetaMovil }} flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="truncate font-semibold text-zinc-900 dark:text-white">{{ $gasto->concepto }}</div>
+                                    <div class="text-sm font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">${{ number_format($gasto->precio, 2) }}</div>
+                                </div>
+                                <div class="flex gap-1">
+                                    <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar gasto" wire:click="abrirGasto({{ $gasto->id }})" />
+                                    <flux:button size="sm" variant="ghost" icon="trash" class="!text-negative" aria-label="Eliminar gasto" wire:click="eliminarGasto({{ $gasto->id }})" wire:confirm="¿Eliminar este gasto?" />
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </x-detalle-panel>
+    </div>
+
+    {{-- Mermas --}}
+    <div x-show="tab === 'mermas'" x-cloak role="tabpanel">
+        <x-detalle-panel
+            icon="trash"
+            title="Mermas"
+            subtitle="Producto perdido o dañado durante el día."
+            :totales="$cuenta->mermas->isEmpty() ? [] : ['Total' => '$'.number_format($totalMermas, 2)]"
+        >
+            <x-slot:action>
+                <flux:button size="sm" icon="plus" wire:click="abrirMerma">Agregar merma</flux:button>
+            </x-slot:action>
+
+            @if ($cuenta->mermas->isEmpty())
+                <x-empty-state icon="trash" title="Sin mermas registradas" hint="Registra el producto que se perdió o se dañó para que se descuente de la venta." />
+            @else
+                <div class="max-h-[32rem] overflow-y-auto">
+                    <table class="hidden w-full text-left text-[13.5px] md:table">
+                        <thead>
+                            <tr class="sticky top-0 z-10">
+                                <th class="{{ $th }}">Concepto</th>
+                                <th class="{{ $th }} text-right">Importe</th>
+                                <th class="{{ $th }} w-24"><span class="sr-only">Acciones</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($cuenta->mermas as $merma)
+                                <tr wire:key="merma-{{ $merma->id }}" class="{{ $tr }}">
+                                    <td class="{{ $td }} font-semibold">{{ $merma->concepto }}</td>
+                                    <td class="{{ $td }} text-right font-semibold tabular-nums">${{ number_format($merma->precio, 2) }}</td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex justify-end gap-1">
+                                            <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar merma" wire:click="abrirMerma({{ $merma->id }})" />
+                                            <flux:button size="sm" variant="ghost" icon="trash" class="!text-negative" aria-label="Eliminar merma" wire:click="eliminarMerma({{ $merma->id }})" wire:confirm="¿Eliminar esta merma?" />
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+
+                    <div class="md:hidden">
+                        @foreach ($cuenta->mermas as $merma)
+                            <div wire:key="merma-movil-{{ $merma->id }}" class="{{ $tarjetaMovil }} flex items-center justify-between gap-3">
+                                <div class="min-w-0">
+                                    <div class="truncate font-semibold text-zinc-900 dark:text-white">{{ $merma->concepto }}</div>
+                                    <div class="text-sm font-semibold tabular-nums text-zinc-600 dark:text-zinc-300">${{ number_format($merma->precio, 2) }}</div>
+                                </div>
+                                <div class="flex gap-1">
+                                    <flux:button size="sm" variant="ghost" icon="pencil-square" aria-label="Editar merma" wire:click="abrirMerma({{ $merma->id }})" />
+                                    <flux:button size="sm" variant="ghost" icon="trash" class="!text-negative" aria-label="Eliminar merma" wire:click="eliminarMerma({{ $merma->id }})" wire:confirm="¿Eliminar esta merma?" />
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </x-detalle-panel>
     </div>
 
     {{-- Modal Status --}}
     <flux:modal wire:model="openStatus" name="status" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">Cambiar status</flux:heading>
+            <x-modal-header icon="flag" title="Cambiar status" subtitle="Actualiza el estado de pago de la cuenta." />
             <flux:select wire:model="statusId" label="Status">
                 <flux:select.option value="">Selecciona un status</flux:select.option>
                 @foreach ($this->statusOptions as $status)
                     <flux:select.option value="{{ $status->id }}">{{ $status->name }}</flux:select.option>
                 @endforeach
             </flux:select>
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openStatus', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarStatus">Guardar</flux:button>
             </div>
@@ -981,10 +1218,10 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {{-- Modal Efectivo --}}
     <flux:modal wire:model="openEfectivo" name="efectivo" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">Efectivo y tarjeta</flux:heading>
+            <x-modal-header icon="banknotes" title="Efectivo y tarjeta" subtitle="Registra lo entregado en efectivo y con tarjeta." />
             <flux:input type="number" step="0.001" icon="currency-dollar" wire:model="efectivoEntregado" label="Efectivo entregado" />
             <flux:input type="number" step="0.001" icon="credit-card" wire:model="tarjeta" label="Pago con tarjeta" />
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openEfectivo', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarEfectivo">Guardar</flux:button>
             </div>
@@ -994,7 +1231,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {{-- Modal Salida --}}
     <flux:modal wire:model="openSalida" name="salida-show" class="max-w-md">
         <div class="space-y-4">
-            <flux:heading size="lg">{{ $salidaEditId ? 'Editar salida' : 'Nueva salida' }}</flux:heading>
+            <x-modal-header icon="truck" :title="$salidaEditId ? 'Editar salida' : 'Nueva salida'" subtitle="Producto que se envía a otra sucursal." />
             <flux:select wire:model="salidaForm.productoId" label="Producto">
                 <flux:select.option value="">Selecciona un producto</flux:select.option>
                 @foreach ($this->productos as $producto)
@@ -1003,8 +1240,8 @@ new #[Title('Detalle de cuenta')] class extends Component {
             </flux:select>
             <flux:input type="number" step="0.001" wire:model="salidaForm.precio" label="Precio" />
             <flux:input type="number" step="0.001" wire:model="salidaForm.cantidad" label="Cantidad" />
-            <div class="flex justify-between items-baseline rounded-lg bg-zinc-50 dark:bg-white/5 px-3 py-2.5">
-                <span class="text-xs font-bold uppercase tracking-wide text-zinc-400">Total</span>
+            <div class="flex items-baseline justify-between rounded-xl bg-accent-soft px-4 py-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-accent-content">Total</span>
                 <span
                     class="font-bold text-zinc-900 dark:text-white tabular-nums"
                     x-text="'$' + ((Number($wire.salidaForm.precio) || 0) * (Number($wire.salidaForm.cantidad) || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })"
@@ -1016,7 +1253,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
                     <flux:select.option value="{{ $sucursal->id }}">{{ $sucursal->name }}</flux:select.option>
                 @endforeach
             </flux:select>
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openSalida', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarSalida">Guardar</flux:button>
             </div>
@@ -1026,10 +1263,10 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {{-- Modal Gasto --}}
     <flux:modal wire:model="openGasto" name="gasto-show" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">{{ $gastoEditId ? 'Editar gasto' : 'Nuevo gasto' }}</flux:heading>
+            <x-modal-header icon="credit-card" :title="$gastoEditId ? 'Editar gasto' : 'Nuevo gasto'" subtitle="Egreso registrado en esta cuenta." />
             <flux:input wire:model="gastoForm.concepto" label="Concepto" />
             <flux:input type="number" step="0.001" wire:model="gastoForm.precio" label="Precio" />
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openGasto', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarGasto">Guardar</flux:button>
             </div>
@@ -1039,10 +1276,10 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {{-- Modal Merma --}}
     <flux:modal wire:model="openMerma" name="merma-show" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">{{ $mermaEditId ? 'Editar merma' : 'Nueva merma' }}</flux:heading>
+            <x-modal-header icon="trash" :title="$mermaEditId ? 'Editar merma' : 'Nueva merma'" subtitle="Producto perdido o dañado en esta cuenta." />
             <flux:input wire:model="mermaForm.concepto" label="Concepto" />
             <flux:input type="number" step="0.001" wire:model="mermaForm.precio" label="Precio" />
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openMerma', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarMerma">Guardar</flux:button>
             </div>
@@ -1052,7 +1289,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {{-- Modal Item --}}
     <flux:modal wire:model="openItem" name="item-show" class="max-w-md">
         <div class="space-y-4">
-            <flux:heading size="lg">{{ $itemEditId ? 'Editar producto' : 'Agregar producto' }}</flux:heading>
+            <x-modal-header icon="cube" :title="$itemEditId ? 'Editar producto' : 'Agregar producto'" subtitle="Producto con su precio, entrada y sobrante." />
             <flux:select wire:model="itemForm.productoId" label="Producto" :disabled="(bool) $itemEditId">
                 <flux:select.option value="">Selecciona un producto</flux:select.option>
                 @foreach ($this->productos as $producto)
@@ -1062,7 +1299,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
             <flux:input type="number" step="0.001" wire:model="itemForm.precio" label="Precio" />
             <flux:input type="number" step="0.001" wire:model="itemForm.cantidadEntrada" label="Cantidad entrada" />
             <flux:input type="number" step="0.001" wire:model="itemForm.cantidadSobrante" label="Cantidad sobrante" />
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openItem', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarItem">Guardar</flux:button>
             </div>

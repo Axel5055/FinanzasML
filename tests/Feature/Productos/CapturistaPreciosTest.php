@@ -83,3 +83,56 @@ test('admin can still manage the full product catalog', function () {
 
     $this->assertDatabaseHas('productos', ['name' => 'PRODUCTO ADMIN']);
 });
+
+test('el catalogo se muestra como lista con categoria y precio', function () {
+    $admin = User::factory()->create();
+    $admin->assignRole('Admin');
+
+    $categoria = Categoria::factory()->create(['name' => 'Pollo']);
+    Producto::factory()->create(['name' => 'Pechuga', 'categoria_id' => $categoria->id, 'precio' => 120.5]);
+    Producto::factory()->create(['name' => 'Alitas', 'categoria_id' => $categoria->id, 'precio' => null]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::productos.index')
+        ->assertSee('<th class="px-4 py-3">Categoría</th>', false)
+        ->assertSee('PECHUGA')
+        ->assertSee('Pollo')
+        ->assertSee('$120.50')
+        ->assertSee('Sin precio');
+});
+
+test('la busqueda y el filtro de categoria acotan los productos visibles', function () {
+    $admin = User::factory()->create();
+    $admin->assignRole('Admin');
+
+    $pollo = Categoria::factory()->create(['name' => 'Pollo']);
+    $res = Categoria::factory()->create(['name' => 'Res']);
+    Producto::factory()->create(['name' => 'Pechuga', 'categoria_id' => $pollo->id]);
+    Producto::factory()->create(['name' => 'Alitas', 'categoria_id' => $pollo->id]);
+    Producto::factory()->create(['name' => 'Arrachera', 'categoria_id' => $res->id]);
+
+    $component = Livewire::actingAs($admin)->test('pages::productos.index');
+
+    expect($component->get('visibles'))->toHaveCount(3);
+
+    $component->set('categoriaFiltro', (string) $res->id);
+    expect($component->get('visibles')->pluck('name')->all())->toBe(['ARRACHERA']);
+
+    $component->set('categoriaFiltro', '')->set('buscar', 'alit');
+    expect($component->get('visibles')->pluck('name')->all())->toBe(['ALITAS']);
+
+    $component->call('limpiarFiltros')->assertSet('buscar', '')->assertSet('categoriaFiltro', '');
+    expect($component->get('visibles'))->toHaveCount(3);
+});
+
+test('el resumen cuenta los productos sin precio', function () {
+    $admin = User::factory()->create();
+    $admin->assignRole('Admin');
+
+    Producto::factory()->create(['precio' => null]);
+    Producto::factory()->create(['precio' => 10]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::productos.index')
+        ->assertSeeInOrder(['Productos', '2', 'Sin precio', '1']);
+});

@@ -49,3 +49,15 @@ test('un admin normal no puede acceder a la configuracion', function () {
         ->get(route('admin.configuracion.index'))
         ->assertForbidden();
 });
+
+test('la configuracion muestra el estado actual del llenado con IA', function () {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('Super Admin');
+
+    Livewire::actingAs($superAdmin)
+        ->test('pages::configuracion.index')
+        ->assertSee('Habilitado')
+        ->assertDontSee('Deshabilitado')
+        ->set('iaCapturaHabilitada', false)
+        ->assertSee('Deshabilitado');
+});

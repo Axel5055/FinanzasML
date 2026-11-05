@@ -15,7 +15,7 @@ use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-#[Signature('legacy:import-cuentas {--connection-database=tepetlapa : Nombre de la base de datos legada en el mismo servidor MySQL} {--force : Permite ejecutar aunque ya existan cuentas importadas}')]
+#[Signature('legacy:import-cuentas {--connection-database=tepetlapa : Nombre de la base de datos legada en el mismo servidor MySQL} {--force : Permite ejecutar aunque ya existan cuentas importadas} {--solo-faltantes : Inserta únicamente los registros cuyo id aún no existe, sin tocar los existentes}')]
 #[Description('Importa cuentas y sus datos relacionados (item_cuentas, salidas, entradas, gastos, mermas) desde la base de datos legada de mlgrupoc_tepetlapa')]
 class ImportLegacyCuentas extends Command
 {
@@ -24,8 +24,8 @@ class ImportLegacyCuentas extends Command
      */
     public function handle(): int
     {
-        if (Cuenta::query()->exists() && ! $this->option('force')) {
-            $this->error('Ya existen cuentas en la base de datos. Usa --force si de verdad quieres volver a importar (puede duplicar datos).');
+        if (Cuenta::query()->exists() && ! $this->option('force') && ! $this->option('solo-faltantes')) {
+            $this->error('Ya existen cuentas en la base de datos. Usa --solo-faltantes para agregar solo lo que falta, o --force si de verdad quieres volver a importar (puede duplicar datos).');
 
             return self::FAILURE;
         }
@@ -218,8 +218,7 @@ class ImportLegacyCuentas extends Command
             }
 
             if ($insert !== []) {
-                DB::table('cuentas')->insert($insert);
-                $total += count($insert);
+                $total += $this->insertarFilas('cuentas', $insert);
             }
         });
 
@@ -258,8 +257,7 @@ class ImportLegacyCuentas extends Command
             }
 
             if ($insert !== []) {
-                DB::table('salidas')->insert($insert);
-                $total += count($insert);
+                $total += $this->insertarFilas('salidas', $insert);
             }
         });
 
@@ -301,8 +299,7 @@ class ImportLegacyCuentas extends Command
             }
 
             if ($insert !== []) {
-                DB::table('entradas')->insert($insert);
-                $total += count($insert);
+                $total += $this->insertarFilas('entradas', $insert);
             }
         });
 
@@ -346,8 +343,7 @@ class ImportLegacyCuentas extends Command
             }
 
             if ($insert !== []) {
-                DB::table('item_cuentas')->insert($insert);
-                $total += count($insert);
+                $total += $this->insertarFilas('item_cuentas', $insert);
             }
         });
 
@@ -381,8 +377,7 @@ class ImportLegacyCuentas extends Command
             }
 
             if ($insert !== []) {
-                DB::table('gastos')->insert($insert);
-                $total += count($insert);
+                $total += $this->insertarFilas('gastos', $insert);
             }
         });
 
@@ -416,11 +411,24 @@ class ImportLegacyCuentas extends Command
             }
 
             if ($insert !== []) {
-                DB::table('mermas')->insert($insert);
-                $total += count($insert);
+                $total += $this->insertarFilas('mermas', $insert);
             }
         });
 
         $this->info("Mermas importadas: {$total}");
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $filas
+     */
+    private function insertarFilas(string $tabla, array $filas): int
+    {
+        if ($this->option('solo-faltantes')) {
+            return DB::table($tabla)->insertOrIgnore($filas);
+        }
+
+        DB::table($tabla)->insert($filas);
+
+        return count($filas);
     }
 }

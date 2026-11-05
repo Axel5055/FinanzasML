@@ -27,26 +27,35 @@ new #[Title('Configuración')] class extends Component {
     }
 }; ?>
 
-<div class="space-y-6 max-w-2xl">
-    <div class="flex items-center gap-2">
-        <span class="w-[26px] h-[26px] rounded bg-accent-soft text-accent flex items-center justify-center flex-none">
-            <flux:icon name="cog-6-tooth" class="w-3.5 h-3.5" />
-        </span>
-        <div>
-            <flux:heading size="lg">Configuración</flux:heading>
-            <flux:subheading>Ajustes generales del sistema, disponibles solo para Super Admin.</flux:subheading>
-        </div>
-    </div>
+<div class="max-w-3xl space-y-6">
+    <x-page-header icon="cog-6-tooth" title="Configuración" subtitle="Ajustes generales del sistema, disponibles solo para Super Admin." />
 
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-5">
-        <div class="flex items-start justify-between gap-4">
-            <div>
-                <div class="font-semibold text-zinc-900 dark:text-zinc-100">Llenado automático con foto o PDF (IA)</div>
-                <p class="text-sm text-zinc-500 mt-1 max-w-md">
-                    Cuando está habilitado, los capturistas ven la opción de subir una foto o PDF del formulario en "Registrar cuenta" para que el sistema intente llenar los datos automáticamente. Al deshabilitarlo, esa opción desaparece y solo queda la captura manual.
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+        <div class="border-b border-zinc-200/70 px-5 py-3 dark:border-zinc-700/70">
+            <h2 class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Captura de cuentas</h2>
+        </div>
+
+        <div class="flex items-start gap-4 p-5">
+            <span class="flex size-12 flex-none items-center justify-center rounded-xl bg-accent-soft text-accent">
+                <flux:icon name="sparkles" class="size-6" />
+            </span>
+
+            <div class="min-w-0 flex-1">
+                <div class="flex flex-wrap items-center gap-2">
+                    <h3 class="font-semibold text-zinc-900 dark:text-white">Llenado automático con foto o PDF (IA)</h3>
+                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold {{ $iaCapturaHabilitada ? 'bg-positive-soft text-positive' : 'bg-zinc-100 text-zinc-500 dark:bg-white/10' }}">
+                        {{ $iaCapturaHabilitada ? 'Habilitado' : 'Deshabilitado' }}
+                    </span>
+                </div>
+                <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">
+                    Cuando está habilitado, los capturistas ven la opción de subir una foto o PDF del formulario en "Registrar cuenta" para que el sistema intente llenar los datos automáticamente.
+                </p>
+                <p class="mt-1.5 text-sm text-zinc-500">
+                    Al deshabilitarlo, esa opción desaparece y solo queda la captura manual.
                 </p>
             </div>
-            <flux:switch wire:model.live="iaCapturaHabilitada" />
+
+            <flux:switch wire:model.live="iaCapturaHabilitada" aria-label="Llenado automático con IA" />
         </div>
     </div>
 </div>

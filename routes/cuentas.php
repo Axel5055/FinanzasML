@@ -24,7 +24,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:admin.cuentas.show')
         ->name('admin.cuentas.pdf');
 
-    Route::get('cuentas/pdf/rango', [ReporteController::class, 'downloadByDateRange'])
-        ->middleware('can:admin.cuentas.index')
-        ->name('admin.cuentas.pdf.rango');
+    Route::livewire('admin/reportes', 'pages::reportes.index')
+        ->middleware('role:Admin|Super Admin')
+        ->name('admin.reportes.index');
+
+    Route::get('admin/reportes/descargar', [ReporteController::class, 'exportar'])
+        ->middleware('role:Admin|Super Admin')
+        ->name('admin.reportes.descargar');
 });

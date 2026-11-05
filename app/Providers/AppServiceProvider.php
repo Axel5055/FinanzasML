@@ -2,10 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\ActivityLog;
 use Carbon\CarbonImmutable;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -26,6 +30,25 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureTrustedProxies();
+        $this->registrarSesionesEnBitacora();
+    }
+
+    /**
+     * Deja constancia en la bitácora de cada inicio y cierre de sesión.
+     */
+    protected function registrarSesionesEnBitacora(): void
+    {
+        Event::listen(Login::class, fn (Login $evento) => ActivityLog::create([
+            'user_id' => $evento->user->getAuthIdentifier(),
+            'description' => 'inició sesión',
+            'ip_address' => request()->ip(),
+        ]));
+
+        Event::listen(Logout::class, fn (Logout $evento) => $evento->user && ActivityLog::create([
+            'user_id' => $evento->user->getAuthIdentifier(),
+            'description' => 'cerró sesión',
+            'ip_address' => request()->ip(),
+        ]));
     }
 
     protected function configureTrustedProxies(): void

@@ -883,16 +883,19 @@ new #[Title('Registrar cuenta')] class extends Component {
         : Auth::user()->sucursal->name ?? null;
 @endphp
 
+<div class="space-y-6">
+<x-page-header icon="clipboard-document-list" title="Registrar cuenta" subtitle="Captura la cuenta diaria de la sucursal paso a paso." />
+
 <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
     {{-- RIEL DE NAVEGACIÓN --}}
-    <div x-data="{ open: false }" class="bg-white dark:bg-white/10 rounded-xl border border-zinc-200 dark:border-white/10 overflow-hidden lg:sticky lg:top-6">
-        <div class="p-5 flex items-start justify-between gap-3">
-            <div>
-                <div class="text-base font-extrabold text-zinc-900 dark:text-white">ML GRUPO</div>
-                <div class="text-xs text-zinc-500">Registro de cuenta diaria</div>
+    <div x-data="{ open: false }" class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none lg:sticky lg:top-6">
+        <div class="flex items-start justify-between gap-3 p-5">
+            <div class="min-w-0">
+                <h2 class="text-base font-semibold tracking-tight text-zinc-900 dark:text-white">Progreso</h2>
+                <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">Captura diaria · Paso {{ $step }} de {{ count($steps) }}</p>
                 @if ($cuentaEditandoId)
-                    <span class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-[11px] font-bold text-accent">
-                        <flux:icon name="pencil-square" class="w-3 h-3" />
+                    <span class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1 text-[11px] font-semibold text-accent">
+                        <flux:icon name="pencil-square" class="size-3" />
                         Editando cuenta existente
                     </span>
                 @endif
@@ -900,80 +903,94 @@ new #[Title('Registrar cuenta')] class extends Component {
             <button
                 type="button"
                 x-on:click="open = !open"
-                class="lg:hidden flex-none flex items-center gap-1 rounded-lg border border-zinc-200 dark:border-white/10 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-300"
+                class="lg:hidden flex flex-none items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 dark:border-zinc-700 dark:text-zinc-300"
             >
                 <span x-text="open ? 'Ocultar' : 'Ver progreso'"></span>
-                <flux:icon name="chevron-down" x-bind:class="open ? 'rotate-180' : ''" class="w-3.5 h-3.5 transition-transform" />
+                <flux:icon name="chevron-down" x-bind:class="open ? 'rotate-180' : ''" class="size-3.5 transition-transform" />
             </button>
         </div>
 
         <div :class="open ? '' : 'hidden lg:block'">
             @if ($sucursalActual)
                 <div class="px-5 pb-4">
-                    <span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 dark:bg-white/10 px-3 py-1.5 text-xs font-bold text-zinc-700 dark:text-zinc-200">
-                        <flux:icon name="home" class="w-3.5 h-3.5" />
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold text-zinc-700 dark:bg-white/10 dark:text-zinc-200">
+                        <flux:icon name="home" class="size-3.5" />
                         {{ $sucursalActual }}
                     </span>
                 </div>
             @endif
 
-            <flux:separator />
+            <div class="mx-5 mb-3 h-1.5 overflow-hidden rounded-full bg-zinc-100 dark:bg-white/10">
+                <div class="h-full rounded-full bg-accent transition-all duration-300" style="width: {{ round($step / count($steps) * 100) }}%"></div>
+            </div>
 
-            <nav class="p-3 space-y-1">
+            <nav class="relative space-y-0.5 px-3 pb-3 before:absolute before:bottom-6 before:left-[1.625rem] before:top-6 before:w-px before:bg-zinc-200 dark:before:bg-zinc-700">
                 @foreach ($steps as $n => $label)
+                    @php
+                        $hecho = $n < $step;
+                        $actual = $step === $n;
+                        $habilitado = $n <= $maxStepReached;
+                    @endphp
                     <button
                         type="button"
                         wire:click="irAPaso({{ $n }})"
                         x-on:click="open = false"
-                        @if ($n > $maxStepReached) disabled @endif
-                        class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-semibold text-start transition
-                            {{ $step === $n
+                        @if (! $habilitado) disabled @endif
+                        class="relative flex w-full items-center gap-3 rounded-xl px-2 py-2 text-start text-sm font-medium transition
+                            {{ $actual
                                 ? 'bg-accent-soft text-accent'
-                                : ($n <= $maxStepReached ? 'text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-white/5' : 'text-zinc-300 dark:text-zinc-600 cursor-not-allowed') }}"
+                                : ($habilitado ? 'text-zinc-700 hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-white/5' : 'cursor-not-allowed text-zinc-400 dark:text-zinc-600') }}"
                     >
-                        <span class="w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold flex-none
-                            {{ $step === $n ? 'bg-accent text-white' : 'bg-zinc-100 dark:bg-white/10 text-zinc-400' }}">{{ $n }}</span>
-                        <flux:icon :name="$stepIcons[$n]" class="w-4 h-4 flex-none" />
-                        <span>{{ $label }}</span>
+                        <span class="relative flex size-7 flex-none items-center justify-center rounded-full text-xs font-semibold
+                            {{ $actual
+                                ? 'bg-accent text-white shadow-sm shadow-accent/40'
+                                : ($hecho ? 'bg-positive text-white' : 'bg-zinc-100 text-zinc-500 ring-1 ring-zinc-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700') }}">
+                            @if ($hecho)
+                                <flux:icon name="check" class="size-3.5" />
+                            @else
+                                {{ $n }}
+                            @endif
+                        </span>
+                        <span class="flex-1">{{ $label }}</span>
+                        <flux:icon :name="$stepIcons[$n]" class="size-4 flex-none opacity-50" />
                     </button>
                 @endforeach
             </nav>
 
-            <flux:separator />
-
-            <div class="p-5 bg-zinc-50 dark:bg-white/5">
-                <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-500 mb-3">Resumen en vivo</div>
-                <div class="space-y-1.5 text-sm">
-                    <div class="flex justify-between"><span class="text-zinc-500">Existencia</span><span class="font-semibold text-positive">+${{ $this->formatearImporte($sumExistencia) }}</span></div>
-                    <div class="flex justify-between"><span class="text-zinc-500">Entrada</span><span class="font-semibold text-positive">+${{ $this->formatearImporte($sumEntrada) }}</span></div>
-                    <div class="flex justify-between"><span class="text-zinc-500">Salidas</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($totalSalidas) }}</span></div>
-                    <div class="flex justify-between"><span class="text-zinc-500">Gastos</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($this->sumGastos()) }}</span></div>
-                    <div class="flex justify-between"><span class="text-zinc-500">Merma</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($this->sumMermas()) }}</span></div>
-                    <div class="flex justify-between"><span class="text-zinc-500">Sobrante</span><span class="font-semibold text-negative">-${{ $this->formatearImporte($sumSobrante) }}</span></div>
+            <div class="space-y-3 p-3 pt-0">
+                <div class="rounded-xl bg-zinc-50 p-4 dark:bg-white/5">
+                    <div class="mb-3 text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Resumen en vivo</div>
+                    <div class="space-y-2 text-sm">
+                        <div class="flex justify-between"><span class="text-zinc-500">Existencia</span><span class="font-semibold tabular-nums text-positive">+${{ $this->formatearImporte($sumExistencia) }}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-500">Entrada</span><span class="font-semibold tabular-nums text-positive">+${{ $this->formatearImporte($sumEntrada) }}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-500">Salidas</span><span class="font-semibold tabular-nums text-negative">-${{ $this->formatearImporte($totalSalidas) }}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-500">Gastos</span><span class="font-semibold tabular-nums text-negative">-${{ $this->formatearImporte($this->sumGastos()) }}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-500">Merma</span><span class="font-semibold tabular-nums text-negative">-${{ $this->formatearImporte($this->sumMermas()) }}</span></div>
+                        <div class="flex justify-between"><span class="text-zinc-500">Sobrante</span><span class="font-semibold tabular-nums text-negative">-${{ $this->formatearImporte($sumSobrante) }}</span></div>
+                    </div>
                 </div>
-                <flux:separator class="my-3" />
-                <div class="flex justify-between items-baseline">
-                    <span class="font-bold text-zinc-900 dark:text-white">Total</span>
-                    <span class="text-lg font-extrabold text-zinc-900 dark:text-white">${{ $this->formatearImporte($this->totalVentaCalculado()) }}</span>
+                <div class="flex items-center justify-between rounded-xl bg-brand px-4 py-3.5 text-white shadow-lg shadow-brand/30">
+                    <span class="text-sm font-medium text-white/80">Total venta</span>
+                    <span class="text-xl font-semibold tabular-nums">${{ $this->formatearImporte($this->totalVentaCalculado()) }}</span>
                 </div>
             </div>
         </div>
     </div>
 
     {{-- CONTENIDO --}}
-    <div class="bg-white dark:bg-white/10 rounded-xl border border-zinc-200 dark:border-white/10 overflow-hidden">
+    <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
         {{-- Encabezado: sucursal / fechas --}}
-        <div class="bg-zinc-50 dark:bg-white/5 p-5 border-b border-zinc-200 dark:border-white/10">
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="border-b border-zinc-200/70 bg-zinc-50 p-5 dark:border-zinc-700/70 dark:bg-white/5">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 @if ($esAdmin)
-                    <flux:select wire:model="sucursalId" label="Sucursal" icon="home" field:class="w-full" :disabled="! $buttonsDisabled">
+                    <flux:select wire:model="sucursalId" label="Sucursal" icon="home" field:class="w-full sm:col-span-2 xl:col-span-1" :disabled="! $buttonsDisabled">
                         <flux:select.option value="">Selecciona una sucursal</flux:select.option>
                         @foreach ($sucursales as $sucursal)
                             <flux:select.option value="{{ $sucursal->id }}">{{ $sucursal->name }}</flux:select.option>
                         @endforeach
                     </flux:select>
                 @else
-                    <flux:input label="Sucursal" icon="home" value="{{ Auth::user()->sucursal->name ?? '' }}" readonly field:class="w-full" />
+                    <flux:input label="Sucursal" icon="home" value="{{ Auth::user()->sucursal->name ?? '' }}" readonly field:class="w-full sm:col-span-2 xl:col-span-1" />
                 @endif
 
                 <flux:input type="date" wire:model="fechaVenta" label="Fecha de venta" icon="calendar" field:class="w-full" :disabled="(bool) $cuentaEditandoId" />
@@ -983,15 +1000,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
         <div class="p-5 space-y-4">
             {{-- Título del paso --}}
-            <div class="flex items-start gap-2.5">
-                <span class="w-9 h-9 rounded-lg bg-accent-soft text-accent flex items-center justify-center flex-none">
-                    <flux:icon :name="$stepIcons[$step]" class="w-4.5 h-4.5" />
-                </span>
-                <div>
-                    <flux:heading size="lg">{{ $stepTitles[$step][0] }}</flux:heading>
-                    <flux:subheading>{{ $stepTitles[$step][1] }}</flux:subheading>
-                </div>
-            </div>
+            <x-page-header size="md" :icon="$stepIcons[$step]" :title="$stepTitles[$step][0]" :subtitle="$stepTitles[$step][1]" />
 
             {{-- Paso 1: Existencia --}}
             @if ($step === 1)
@@ -1040,7 +1049,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 </div>
                             @endif
                             @if (! empty($renglonesNoReconocidos))
-                                <div class="text-xs text-violet-700 bg-violet-50 border border-violet-200 dark:text-violet-300 dark:bg-violet-400/10 dark:border-violet-400/30 rounded-lg p-2">
+                                <div class="text-xs text-accent bg-accent-soft border border-accent/30 rounded-lg p-2">
                                     <strong>No identificados, agrégalos manualmente:</strong> {{ implode(', ', $renglonesNoReconocidos) }}
                                 </div>
                             @endif
@@ -1056,7 +1065,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     </div>
 
                     <div class="w-full overflow-x-auto max-h-[28rem] overflow-y-auto">
-                        <flux:table class="min-w-[640px]">
+                        <flux:table class="sm:min-w-[640px] max-sm:[&_td]:px-2 max-sm:[&_th]:px-2 max-sm:[&_th]:whitespace-normal">
                             <flux:table.columns>
                                 <flux:table.column>Producto</flux:table.column>
                                 <flux:table.column>Precio</flux:table.column>
@@ -1100,7 +1109,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     <div x-data="{ q: '' }" class="space-y-3">
                         <flux:input x-model="q" icon="magnifying-glass" placeholder="Buscar producto..." class="sm:max-w-xs" />
                         <div class="overflow-x-auto max-h-[28rem] overflow-y-auto">
-                            <flux:table class="min-w-[640px]">
+                            <flux:table class="sm:min-w-[640px] max-sm:[&_td]:px-2 max-sm:[&_th]:px-2 max-sm:[&_th]:whitespace-normal">
                                 <flux:table.columns>
                                     <flux:table.column>Producto</flux:table.column>
                                     <flux:table.column>Precio</flux:table.column>
@@ -1120,7 +1129,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                                 <div class="flex items-center gap-1.5">
                                                     <flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_entrada" />
                                                     @if (isset($camposAutodetectados['items.'.$index.'.cantidad_entrada']))
-                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none" title="Detectado automáticamente" />
+                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-accent flex-none" title="Detectado automáticamente" />
                                                     @endif
                                                 </div>
                                             </flux:table.cell>
@@ -1187,7 +1196,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 <div class="flex gap-2 items-end">
                                     <flux:input field:class="flex-1 sm:w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="gastos.{{ $index }}.precio" />
                                     @if (isset($camposAutodetectados['gastos.'.$index]))
-                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-accent flex-none mb-2.5" title="Detectado automáticamente" />
                                     @endif
                                     <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeGasto({{ $index }})" />
                                 </div>
@@ -1212,7 +1221,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 <div class="flex gap-2 items-end">
                                     <flux:input field:class="flex-1 sm:w-40" size="sm" type="number" step="0.001" icon="currency-dollar" placeholder="Precio" wire:model.live.debounce.500ms="mermas.{{ $index }}.precio" />
                                     @if (isset($camposAutodetectados['mermas.'.$index]))
-                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-accent flex-none mb-2.5" title="Detectado automáticamente" />
                                     @endif
                                     <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeMerma({{ $index }})" />
                                 </div>
@@ -1230,7 +1239,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                     <div x-data="{ q: '' }" class="space-y-3">
                         <flux:input x-model="q" icon="magnifying-glass" placeholder="Buscar producto..." class="sm:max-w-xs" />
                         <div class="overflow-x-auto max-h-[28rem] overflow-y-auto">
-                            <flux:table class="min-w-[640px]">
+                            <flux:table class="sm:min-w-[640px] max-sm:[&_td]:px-2 max-sm:[&_th]:px-2 max-sm:[&_th]:whitespace-normal">
                                 <flux:table.columns>
                                     <flux:table.column>Producto</flux:table.column>
                                     <flux:table.column>Precio</flux:table.column>
@@ -1251,7 +1260,7 @@ new #[Title('Registrar cuenta')] class extends Component {
                                                 <div class="flex items-center gap-1.5">
                                                     <flux:input size="sm" type="number" step="0.001" wire:model.live.debounce.500ms="items.{{ $index }}.cantidad_sobrante" />
                                                     @if (isset($camposAutodetectados['items.'.$index.'.cantidad_sobrante']))
-                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-violet-500 flex-none" title="Detectado automáticamente" />
+                                                        <flux:icon name="sparkles" class="w-3.5 h-3.5 text-accent flex-none" title="Detectado automáticamente" />
                                                     @endif
                                                 </div>
                                             </flux:table.cell>
@@ -1279,7 +1288,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
                         {{-- Ticket de cierre --}}
-                        <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 p-5">
+                        <div class="rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-white/5 dark:shadow-none">
                             <div class="text-center mb-4">
                                 <div class="text-[10.5px] font-bold uppercase tracking-wide text-zinc-400">Ticket de cierre</div>
                                 <div class="font-bold text-zinc-900 dark:text-white">{{ $sucursalActual }}</div>
@@ -1312,25 +1321,25 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 </div>
                             </div>
 
-                            <div class="flex justify-between items-baseline pt-3 mt-1 border-t-2 border-zinc-900 dark:border-white">
-                                <span class="font-bold">Total venta</span>
-                                <span class="text-xl font-extrabold">${{ $this->formatearImporte($this->totalVentaCalculado()) }}</span>
+                            <div class="mt-3 flex items-center justify-between rounded-xl bg-brand px-4 py-3 text-white shadow-lg shadow-brand/30">
+                                <span class="text-sm font-medium text-white/80">Total venta</span>
+                                <span class="text-xl font-semibold tabular-nums">${{ $this->formatearImporte($this->totalVentaCalculado()) }}</span>
                             </div>
                         </div>
 
                         {{-- Efectivo entregado / tarjeta / diferencia --}}
-                        <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-white/5 p-5 space-y-4 self-start">
+                        <div class="space-y-4 self-start rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-white/5 dark:shadow-none">
                             <div class="flex items-end gap-1.5">
                                 <flux:input field:class="flex-1" type="number" step="0.001" icon="currency-dollar" wire:model.live.debounce.500ms="efectivoEntregado" label="Efectivo entregado" />
                                 @if (isset($camposAutodetectados['efectivoEntregado']))
-                                    <flux:icon name="sparkles" class="w-4 h-4 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                    <flux:icon name="sparkles" class="w-4 h-4 text-accent flex-none mb-2.5" title="Detectado automáticamente" />
                                 @endif
                             </div>
 
                             <div class="flex items-end gap-1.5">
                                 <flux:input field:class="flex-1" type="number" step="0.001" icon="credit-card" wire:model.live.debounce.500ms="tarjeta" label="Pago con tarjeta" />
                                 @if (isset($camposAutodetectados['tarjeta']))
-                                    <flux:icon name="sparkles" class="w-4 h-4 text-violet-500 flex-none mb-2.5" title="Detectado automáticamente" />
+                                    <flux:icon name="sparkles" class="w-4 h-4 text-accent flex-none mb-2.5" title="Detectado automáticamente" />
                                 @endif
                             </div>
 
@@ -1380,12 +1389,12 @@ new #[Title('Registrar cuenta')] class extends Component {
                     >Guardar cuenta</flux:button>
                 @endif
 
-                <div class="flex justify-between items-center pt-4 border-t border-zinc-200 dark:border-white/10">
-                    <span class="text-xs text-zinc-500">Paso {{ $step }} de 7</span>
+                <div class="flex items-center justify-between border-t border-zinc-200/70 pt-4 dark:border-zinc-700/70">
+                    <span class="text-xs font-medium text-zinc-500">Paso {{ $step }} de 7</span>
                     <div class="flex gap-2">
-                        <flux:button variant="ghost" wire:click="pasoAnterior" :disabled="$step === 1">Anterior</flux:button>
+                        <flux:button variant="ghost" icon="arrow-left" wire:click="pasoAnterior" :disabled="$step === 1">Anterior</flux:button>
                         @if ($step < 7)
-                            <flux:button variant="primary" wire:click="siguientePaso">Siguiente</flux:button>
+                            <flux:button variant="primary" icon-trailing="arrow-right" wire:click="siguientePaso">Siguiente</flux:button>
                         @endif
                     </div>
                 </div>
@@ -1395,7 +1404,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
     <flux:modal wire:model="openSalida" name="salida" class="max-w-md">
         <div class="space-y-4">
-            <flux:heading size="lg">{{ $salidaEditId ? 'Editar salida' : 'Nueva salida' }}</flux:heading>
+            <x-modal-header icon="truck" :title="$salidaEditId ? 'Editar salida' : 'Nueva salida'" subtitle="Producto que se envía a otra sucursal." />
 
             <flux:select wire:model="salidaProductoId" label="Producto">
                 <flux:select.option value="">Selecciona un producto</flux:select.option>
@@ -1407,8 +1416,8 @@ new #[Title('Registrar cuenta')] class extends Component {
             <flux:input type="number" step="0.001" wire:model="salidaPrecio" label="Precio" />
             <flux:input type="number" step="0.001" wire:model="salidaCantidad" label="Cantidad" />
 
-            <div class="flex justify-between items-baseline rounded-lg bg-zinc-50 dark:bg-white/5 px-3 py-2.5">
-                <span class="text-xs font-bold uppercase tracking-wide text-zinc-400">Total</span>
+            <div class="flex items-baseline justify-between rounded-xl bg-accent-soft px-4 py-3">
+                <span class="text-xs font-semibold uppercase tracking-wider text-accent-content">Total</span>
                 <span
                     class="font-bold text-zinc-900 dark:text-white tabular-nums"
                     x-text="'$' + ((Number($wire.salidaPrecio) || 0) * (Number($wire.salidaCantidad) || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })"
@@ -1422,10 +1431,11 @@ new #[Title('Registrar cuenta')] class extends Component {
                 @endforeach
             </flux:select>
 
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openSalida', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="guardarSalida">Guardar</flux:button>
             </div>
         </div>
     </flux:modal>
+</div>
 </div>

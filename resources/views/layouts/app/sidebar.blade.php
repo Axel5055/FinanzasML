@@ -3,8 +3,8 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-white dark:bg-zinc-800">
-        <flux:sidebar sticky collapsible="mobile" class="border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
+    <body class="min-h-screen bg-zinc-100 dark:bg-zinc-800">
+        <flux:sidebar sticky collapsible="mobile" class="dark sidebar-navy border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:sidebar.header>
                 <x-app-logo :sidebar="true" href="{{ route('dashboard') }}" wire:navigate />
                 <flux:sidebar.collapse class="lg:hidden" />
@@ -47,6 +47,13 @@
                             {{ __('Usuarios') }}
                         </flux:sidebar.item>
 
+                        <flux:sidebar.item icon="document-chart-bar" :href="route('admin.reportes.index')" :current="request()->routeIs('admin.reportes.*')" wire:navigate>
+                            {{ __('Reportes') }}
+                        </flux:sidebar.item>
+                        <flux:sidebar.item icon="clipboard-document-check" :href="route('admin.auditoria.index')" :current="request()->routeIs('admin.auditoria.*')" wire:navigate>
+                            {{ __('Auditoría') }}
+                        </flux:sidebar.item>
+
                         @if (auth()->user()->hasRole('Super Admin'))
                             <flux:sidebar.item icon="cog-6-tooth" :href="route('admin.configuracion.index')" :current="request()->routeIs('admin.configuracion.*')" wire:navigate>
                                 {{ __('Configuración') }}
@@ -66,6 +73,8 @@
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 
             <flux:spacer />
+
+            <x-theme-toggle />
 
             <flux:dropdown position="top" align="end">
                 <flux:profile

@@ -1,15 +1,26 @@
 <?php
 
 use App\Models\ActivityLog;
+use App\Models\Cuenta;
 use App\Models\Direccion;
 use App\Models\Sucursal;
 use Flux\Flux;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Sucursales')] class extends Component {
+    public string $buscar = '';
+
+    /** @var 'todas'|'activas'|'inactivas' */
+    public string $filtro = 'todas';
+
+    /** @var 'tarjetas'|'lista' */
+    public string $vista = 'tarjetas';
+
     public bool $openCreate = false;
 
     public bool $openEdit = false;
@@ -29,7 +40,63 @@ new #[Title('Sucursales')] class extends Component {
     #[Computed]
     public function sucursales()
     {
-        return Sucursal::query()->orderBy('name')->get();
+        return Sucursal::query()->with('direccion')->orderBy('name')->get();
+    }
+
+    /**
+     * Sucursales que cumplen la búsqueda y el filtro de estado elegidos.
+     *
+     * @return Collection<int, Sucursal>
+     */
+    #[Computed]
+    public function visibles(): Collection
+    {
+        $termino = Str::lower(trim($this->buscar));
+
+        return $this->sucursales
+            ->when($this->filtro === 'activas', fn (Collection $c) => $c->where('activo', true))
+            ->when($this->filtro === 'inactivas', fn (Collection $c) => $c->where('activo', false))
+            ->when($termino !== '', fn (Collection $c) => $c->filter(
+                fn (Sucursal $s) => Str::contains(Str::lower($s->name.' '.$s->direccion?->direccion_completa), $termino)
+            ))
+            ->values();
+    }
+
+    /**
+     * Ventas y número de cuentas del mes en curso, por sucursal.
+     *
+     * @return array<int, object{ventas: string, cuentas: int}>
+     */
+    #[Computed]
+    public function resumenMes(): array
+    {
+        return Cuenta::query()
+            ->whereBetween('fecha_venta', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+            ->where('total_venta', '!=', 0)
+            ->selectRaw('sucursal_id, SUM(total_venta) as ventas, COUNT(*) as cuentas')
+            ->groupBy('sucursal_id')
+            ->get()
+            ->keyBy('sucursal_id')
+            ->all();
+    }
+
+    /**
+     * @return array<int, string> fecha de la última cuenta registrada por sucursal
+     */
+    #[Computed]
+    public function ultimaCuenta(): array
+    {
+        return Cuenta::query()
+            ->where('total_venta', '!=', 0)
+            ->selectRaw('sucursal_id, MAX(fecha_venta) as ultima')
+            ->groupBy('sucursal_id')
+            ->pluck('ultima', 'sucursal_id')
+            ->all();
+    }
+
+    public function cambiarVista(): void
+    {
+        $this->vista = $this->vista === 'tarjetas' ? 'lista' : 'tarjetas';
     }
 
     private function reglas(bool $esCreacion): array
@@ -58,7 +125,7 @@ new #[Title('Sucursales')] class extends Component {
         $this->validate($this->reglas(esCreacion: true));
 
         try {
-            DB::transaction(function () {
+            $sucursal = DB::transaction(function () {
                 $direccion = Direccion::create([
                     'codigo_postal' => $this->form['codigo_postal'],
                     'colonia' => $this->form['colonia'],
@@ -68,13 +135,13 @@ new #[Title('Sucursales')] class extends Component {
                     'calle' => $this->form['calle'],
                 ]);
 
-                Sucursal::create([
+                return Sucursal::create([
                     'name' => $this->form['name'],
                     'direccion_id' => $direccion->id,
                 ]);
             });
 
-            ActivityLog::log("creó la sucursal \"{$this->form['name']}\"");
+            ActivityLog::log("creó la sucursal \"{$this->form['name']}\"", $sucursal);
 
             $this->openCreate = false;
             Flux::toast(variant: 'success', text: 'Sucursal registrada con éxito.');
@@ -150,94 +217,174 @@ new #[Title('Sucursales')] class extends Component {
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-            <span class="w-[26px] h-[26px] rounded bg-accent-soft text-accent flex items-center justify-center flex-none">
-                <flux:icon name="building-storefront" class="w-3.5 h-3.5" />
-            </span>
-            <div>
-                <flux:heading size="lg">Sucursales</flux:heading>
-                <flux:subheading>Direcciones y estado de cada sucursal.</flux:subheading>
-            </div>
-        </div>
+    <x-page-header icon="building-storefront" title="Sucursales" subtitle="Direcciones y estado de cada sucursal.">
         <flux:button variant="primary" icon="plus" wire:click="abrirCrear">Agregar sucursal</flux:button>
+    </x-page-header>
+
+    {{-- RESUMEN --}}
+    @php
+        $total = $this->sucursales->count();
+        $activas = $this->sucursales->where('activo', true)->count();
+    @endphp
+    <div class="grid grid-cols-3 gap-3 sm:gap-4">
+        <x-stat-card label="Sucursales" icon="building-storefront">{{ $total }}</x-stat-card>
+        <x-stat-card label="Activas" icon="check-circle" tone="positive">{{ $activas }}</x-stat-card>
+        <x-stat-card label="Inactivas" icon="no-symbol">{{ $total - $activas }}</x-stat-card>
     </div>
 
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-        <div class="overflow-x-auto">
-            <table class="w-full table-fixed text-[13.5px] text-left min-w-[760px]">
-                <colgroup>
-                    <col class="w-[18%]">
-                    <col class="w-[42%]">
-                    <col class="w-[15%]">
-                    <col class="w-[25%]">
-                </colgroup>
-                <thead>
-                    <tr>
-                        <th class="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-[10.5px] font-bold tracking-wider uppercase text-zinc-400">Nombre</th>
-                        <th class="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-[10.5px] font-bold tracking-wider uppercase text-zinc-400">Dirección</th>
-                        <th class="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-[10.5px] font-bold tracking-wider uppercase text-zinc-400">Estado</th>
-                        <th class="px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700 text-[10.5px] font-bold tracking-wider uppercase text-zinc-400">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($this->sucursales as $sucursal)
-                        <tr wire:key="sucursal-{{ $sucursal->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                            <td class="px-4 py-3 align-top font-semibold text-zinc-900 dark:text-zinc-100 break-words">{{ $sucursal->name }}</td>
-                            <td class="px-4 py-3 align-top text-zinc-600 dark:text-zinc-400 whitespace-normal break-words">{{ $sucursal->direccion?->direccion_completa }}</td>
-                            <td class="px-4 py-3 align-top">
-                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $sucursal->activo ? 'bg-positive-soft text-positive' : 'bg-zinc-100 dark:bg-white/10 text-zinc-500' }}">
-                                    {{ $sucursal->activo ? 'Activa' : 'Inactiva' }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3 align-top">
-                                <div class="flex flex-wrap gap-1.5">
-                                    <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="abrirEditar({{ $sucursal->id }})">Editar</flux:button>
-                                    <flux:button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        :icon="$sucursal->activo ? 'no-symbol' : 'check-circle'"
-                                        x-on:click.prevent="
-                                            Swal.fire({
-                                                icon: 'question',
-                                                title: '{{ $sucursal->activo ? '¿Deshabilitar esta sucursal?' : '¿Habilitar esta sucursal?' }}',
-                                                text: '{{ $sucursal->activo ? 'Dejará de aparecer en el select para registrar cuentas nuevas. No se elimina ni afecta el historial ya registrado.' : 'La sucursal volverá a estar disponible para registrar cuentas.' }}',
-                                                showDenyButton: true,
-                                                confirmButtonText: '{{ $sucursal->activo ? 'Deshabilitar' : 'Habilitar' }}',
-                                                denyButtonText: 'Cancelar',
-                                            }).then((result) => {
-                                                if (result.isConfirmed) {
-                                                    $wire.toggleActivo({{ $sucursal->id }}).catch((error) => {
-                                                        Swal.fire({
-                                                            icon: 'error',
-                                                            title: 'Error',
-                                                            text: error.message || 'Ocurrió un problema al actualizar la sucursal.',
-                                                            showConfirmButton: true,
-                                                        });
-                                                    });
-                                                }
-                                            })
-                                        "
-                                    >
-                                        {{ $sucursal->activo ? 'Deshabilitar' : 'Habilitar' }}
-                                    </flux:button>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="4" class="px-4 text-center text-zinc-400 text-sm py-10">Sin sucursales registradas.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+    {{-- BÚSQUEDA Y FILTRO --}}
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <flux:input wire:model.live.debounce.250ms="buscar" icon="magnifying-glass" placeholder="Buscar por nombre o dirección..." class="sm:max-w-sm" />
+
+        <div class="flex items-center gap-2">
+            <flux:radio.group wire:model.live="filtro" variant="segmented" size="sm">
+                <flux:radio value="todas" label="Todas" />
+                <flux:radio value="activas" label="Activas" />
+                <flux:radio value="inactivas" label="Inactivas" />
+            </flux:radio.group>
+
+            <flux:button
+                wire:click="cambiarVista"
+                size="sm"
+                :icon="$vista === 'tarjetas' ? 'list-bullet' : 'squares-2x2'"
+                :aria-label="$vista === 'tarjetas' ? 'Cambiar a vista en lista' : 'Cambiar a vista en tarjetas'"
+                :title="$vista === 'tarjetas' ? 'Cambiar a vista en lista' : 'Cambiar a vista en tarjetas'"
+            >
+                {{ $vista === 'tarjetas' ? 'Lista' : 'Tarjetas' }}
+            </flux:button>
         </div>
     </div>
+
+    {{-- SUCURSALES --}}
+    @if ($this->visibles->isEmpty())
+        <div class="rounded-2xl border border-dashed border-zinc-300 px-6 py-14 text-center dark:border-zinc-700">
+            <div class="mx-auto flex size-12 items-center justify-center rounded-xl bg-accent-soft text-accent-content">
+                <flux:icon name="building-storefront" class="size-6" />
+            </div>
+            <p class="mt-3 font-medium text-zinc-900 dark:text-white">
+                {{ $this->sucursales->isEmpty() ? 'Aún no hay sucursales registradas' : 'No encontramos sucursales con ese filtro' }}
+            </p>
+            <p class="mt-1 text-sm text-zinc-500">
+                {{ $this->sucursales->isEmpty() ? 'Agrega la primera con el botón "Agregar sucursal".' : 'Prueba con otra búsqueda o cambia el estado.' }}
+            </p>
+        </div>
+    @elseif ($vista === 'lista')
+        <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+            <div class="overflow-x-auto">
+                <table class="w-full min-w-[640px] text-left text-sm">
+                    <thead>
+                        <tr class="border-b border-zinc-200/70 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-700/70 dark:bg-zinc-800">
+                            <th class="px-3 py-3">Sucursal</th>
+                            <th class="px-3 py-3">Dirección</th>
+                            <th class="px-3 py-3">Estado</th>
+                            <th class="whitespace-nowrap px-3 py-3 text-right">Ventas del mes</th>
+                            <th class="hidden px-3 py-3 text-right xl:table-cell">Cuentas</th>
+                            <th class="hidden whitespace-nowrap px-3 py-3 xl:table-cell">Última cuenta</th>
+                            <th class="px-3 py-3">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($this->visibles as $sucursal)
+                            @php
+                                $mes = $this->resumenMes[$sucursal->id] ?? null;
+                                $ultima = $this->ultimaCuenta[$sucursal->id] ?? null;
+                            @endphp
+                            <tr
+                                wire:key="fila-sucursal-{{ $sucursal->id }}"
+                                @class([
+                                    'border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-white/5',
+                                    'opacity-70' => ! $sucursal->activo,
+                                ])
+                            >
+                                <td class="px-3 py-3">
+                                    <div class="flex items-center gap-3">
+                                        <span class="flex size-8 flex-none items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-content">
+                                            {{ mb_strtoupper(mb_substr($sucursal->name, 0, 1)) }}
+                                        </span>
+                                        <span class="whitespace-nowrap font-semibold text-zinc-900 dark:text-white">{{ $sucursal->name }}</span>
+                                    </div>
+                                </td>
+                                <td class="min-w-[200px] px-3 py-3 text-zinc-600 dark:text-zinc-400">{{ $sucursal->direccion?->direccion_completa ?: 'Sin dirección registrada' }}</td>
+                                <td class="px-3 py-3">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold {{ $sucursal->activo ? 'bg-positive-soft text-positive' : 'bg-zinc-100 text-zinc-500 dark:bg-white/10' }}">
+                                        {{ $sucursal->activo ? 'Activa' : 'Inactiva' }}
+                                    </span>
+                                </td>
+                                <td class="whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums text-zinc-900 dark:text-white">${{ number_format((float) ($mes->ventas ?? 0), 2) }}</td>
+                                <td class="hidden px-3 py-3 text-right tabular-nums text-zinc-900 dark:text-white xl:table-cell">{{ $mes->cuentas ?? 0 }}</td>
+                                <td class="hidden whitespace-nowrap px-3 py-3 tabular-nums text-zinc-600 dark:text-zinc-400 xl:table-cell">{{ $ultima ? \Carbon\Carbon::parse($ultima)->format('d/m/Y') : '—' }}</td>
+                                <td class="px-3 py-3">
+                                    <div class="flex gap-1.5">
+                                        <flux:button size="sm" icon="pencil-square" wire:click="abrirEditar({{ $sucursal->id }})">Editar</flux:button>
+                                        <x-sucursal-toggle-button :sucursal="$sucursal" compact />
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @else
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            @foreach ($this->visibles as $sucursal)
+                @php
+                    $mes = $this->resumenMes[$sucursal->id] ?? null;
+                    $ultima = $this->ultimaCuenta[$sucursal->id] ?? null;
+                @endphp
+                <div
+                    wire:key="sucursal-{{ $sucursal->id }}"
+                    @class([
+                        'flex flex-col gap-4 rounded-2xl border border-zinc-200/70 bg-white p-5 shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none',
+                        'opacity-70' => ! $sucursal->activo,
+                    ])
+                >
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="flex min-w-0 items-center gap-3">
+                            <span class="flex size-11 flex-none items-center justify-center rounded-xl bg-accent-soft text-lg font-semibold text-accent-content">
+                                {{ mb_strtoupper(mb_substr($sucursal->name, 0, 1)) }}
+                            </span>
+                            <div class="min-w-0">
+                                <h3 class="truncate text-base font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $sucursal->name }}</h3>
+                                <span class="mt-0.5 inline-flex items-center gap-1.5 text-xs font-medium {{ $sucursal->activo ? 'text-positive' : 'text-zinc-500' }}">
+                                    <span class="size-1.5 rounded-full {{ $sucursal->activo ? 'bg-positive' : 'bg-zinc-400' }}"></span>
+                                    {{ $sucursal->activo ? 'Activa' : 'Inactiva' }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <p class="flex items-start gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+                        <flux:icon name="map-pin" class="mt-0.5 size-4 flex-none text-zinc-400" />
+                        <span class="break-words">{{ $sucursal->direccion?->direccion_completa ?: 'Sin dirección registrada' }}</span>
+                    </p>
+
+                    <div class="grid grid-cols-2 gap-3 rounded-xl bg-zinc-50 p-3 dark:bg-white/5">
+                        <div>
+                            <div class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Ventas del mes</div>
+                            <div class="mt-0.5 font-semibold tabular-nums text-zinc-900 dark:text-white">${{ number_format((float) ($mes->ventas ?? 0), 2) }}</div>
+                        </div>
+                        <div>
+                            <div class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500">Cuentas del mes</div>
+                            <div class="mt-0.5 font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $mes->cuentas ?? 0 }}</div>
+                        </div>
+                        <div class="col-span-2 text-xs text-zinc-500">
+                            {{ $ultima ? 'Última cuenta: '.\Carbon\Carbon::parse($ultima)->format('d/m/Y') : 'Aún sin cuentas registradas' }}
+                        </div>
+                    </div>
+
+                    <div class="mt-auto flex flex-wrap gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+                        <flux:button size="sm" icon="pencil-square" wire:click="abrirEditar({{ $sucursal->id }})">Editar</flux:button>
+                        <x-sucursal-toggle-button :sucursal="$sucursal" />
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    @endif
 
     <flux:modal wire:model="openCreate" name="crear-sucursal" class="max-w-lg">
         <div class="space-y-4">
-            <flux:heading size="lg">Nueva sucursal</flux:heading>
+            <x-modal-header icon="building-storefront" title="Nueva sucursal" subtitle="Nombre y dirección de la sucursal." />
             <flux:input wire:model="form.name" label="Nombre" />
             <div class="grid grid-cols-2 gap-4">
                 <flux:input wire:model="form.calle" label="Calle" />
@@ -247,7 +394,7 @@ new #[Title('Sucursales')] class extends Component {
                 <flux:input wire:model="form.colonia" label="Colonia" />
                 <flux:input wire:model="form.estado" label="Estado" />
             </div>
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openCreate', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="crear">Guardar</flux:button>
             </div>
@@ -256,7 +403,7 @@ new #[Title('Sucursales')] class extends Component {
 
     <flux:modal wire:model="openEdit" name="editar-sucursal" class="max-w-lg">
         <div class="space-y-4">
-            <flux:heading size="lg">Editar sucursal</flux:heading>
+            <x-modal-header icon="building-storefront" title="Editar sucursal" subtitle="Nombre y dirección de la sucursal." />
             <flux:input wire:model="form.name" label="Nombre" />
             <div class="grid grid-cols-2 gap-4">
                 <flux:input wire:model="form.calle" label="Calle" />
@@ -266,7 +413,7 @@ new #[Title('Sucursales')] class extends Component {
                 <flux:input wire:model="form.colonia" label="Colonia" />
                 <flux:input wire:model="form.estado" label="Estado" />
             </div>
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openEdit', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="actualizar">Guardar</flux:button>
             </div>

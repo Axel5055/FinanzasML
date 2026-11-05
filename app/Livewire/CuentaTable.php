@@ -78,7 +78,7 @@ final class CuentaTable extends PowerGridComponent
 
     private function pill(string $class, string $text): string
     {
-        return "<span class='inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {$class}'>{$text}</span>";
+        return "<span class='inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {$class}'>{$text}</span>";
     }
 
     public function fields(): PowerGridFields
@@ -90,7 +90,7 @@ final class CuentaTable extends PowerGridComponent
             )
             ->add(
                 'sucursal_id',
-                fn (Cuenta $model) => '<span class="font-semibold text-zinc-900 dark:text-zinc-100">'.e($model->sucursal?->name).'</span>'
+                fn (Cuenta $model) => '<span class="flex items-center gap-2.5"><span class="flex size-7 flex-none items-center justify-center rounded-full bg-accent-soft text-xs font-semibold text-accent">'.e(mb_strtoupper(mb_substr((string) $model->sucursal?->name, 0, 1))).'</span><span class="font-semibold text-zinc-900 dark:text-zinc-100">'.e($model->sucursal?->name).'</span></span>'
             )
             ->add(
                 'total_venta_formated',
@@ -118,9 +118,9 @@ final class CuentaTable extends PowerGridComponent
             ->add(
                 'acciones',
                 fn (Cuenta $model) => "<div class='flex gap-1.5'>".
-                    "<a class='text-xs font-bold rounded px-2.5 py-1.5 bg-accent-soft text-accent transition-colors hover:brightness-90' href='".route('admin.cuentas.show', ['cuenta' => $model])."' wire:navigate>Ver</a>".
-                    "<a class='text-xs font-bold rounded px-2.5 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 transition-colors hover:bg-zinc-100 hover:border-zinc-300 dark:hover:bg-white/10 dark:hover:border-zinc-600' href='".route('admin.registrar.index', ['cuenta' => $model])."' wire:navigate>Editar</a>".
-                    "<a class='text-xs font-bold rounded px-2.5 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 transition-colors hover:bg-zinc-100 hover:border-zinc-300 dark:hover:bg-white/10 dark:hover:border-zinc-600' target='_blank' href='".route('admin.cuentas.pdf', ['cuenta' => $model])."'>PDF</a>".
+                    "<a class='text-xs font-semibold rounded-lg px-3 py-1.5 bg-accent-soft text-accent transition-colors hover:brightness-90' href='".route('admin.cuentas.show', ['cuenta' => $model])."' wire:navigate>Ver</a>".
+                    "<a class='text-xs font-semibold rounded-lg px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 transition-colors hover:bg-zinc-100 hover:border-zinc-300 dark:hover:bg-white/10 dark:hover:border-zinc-600' href='".route('admin.registrar.index', ['cuenta' => $model])."' wire:navigate>Editar</a>".
+                    "<a class='text-xs font-semibold rounded-lg px-3 py-1.5 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 transition-colors hover:bg-zinc-100 hover:border-zinc-300 dark:hover:bg-white/10 dark:hover:border-zinc-600' target='_blank' href='".route('admin.cuentas.pdf', ['cuenta' => $model])."'>PDF</a>".
                     '</div>'
             );
     }

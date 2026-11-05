@@ -28,10 +28,39 @@ new #[Title('Usuarios')] class extends Component {
         'password_confirmation' => '',
     ];
 
+    public string $buscar = '';
+
+    public string $rolFiltro = '';
+
+    /** @var 'todos'|'activos'|'deshabilitados' */
+    public string $filtro = 'todos';
+
     #[Computed]
     public function usuarios()
     {
         return User::with('roles', 'sucursal')->orderBy('name')->get();
+    }
+
+    #[Computed]
+    public function visibles()
+    {
+        $texto = mb_strtolower(trim($this->buscar));
+
+        return $this->usuarios
+            ->when($this->filtro === 'activos', fn ($usuarios) => $usuarios->where('activo', true))
+            ->when($this->filtro === 'deshabilitados', fn ($usuarios) => $usuarios->where('activo', false))
+            ->when($this->rolFiltro !== '', fn ($usuarios) => $usuarios->filter(
+                fn ($usuario) => $usuario->roles->contains('name', $this->rolFiltro)
+            ))
+            ->when($texto !== '', fn ($usuarios) => $usuarios->filter(
+                fn ($usuario) => str_contains(mb_strtolower($usuario->name.' '.$usuario->email.' '.$usuario->sucursal?->name), $texto)
+            ))
+            ->values();
+    }
+
+    public function limpiarFiltros(): void
+    {
+        $this->reset(['buscar', 'rolFiltro', 'filtro']);
     }
 
     #[Computed]
@@ -194,101 +223,128 @@ new #[Title('Usuarios')] class extends Component {
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-            <span class="w-[26px] h-[26px] rounded bg-accent-soft text-accent flex items-center justify-center flex-none">
-                <flux:icon name="users" class="w-3.5 h-3.5" />
-            </span>
-            <div>
-                <flux:heading size="lg">Usuarios</flux:heading>
-                <flux:subheading>Administradores y capturistas del sistema.</flux:subheading>
-            </div>
-        </div>
+    <x-page-header icon="users" title="Usuarios" subtitle="Administradores y capturistas del sistema.">
         <flux:button variant="primary" icon="plus" wire:click="abrirCrear">Agregar usuario</flux:button>
+    </x-page-header>
+
+    {{-- RESUMEN --}}
+    @php
+        $totalUsuarios = $this->usuarios->count();
+        $activos = $this->usuarios->where('activo', true)->count();
+        $administradores = $this->usuarios->filter(fn ($usuario) => $usuario->roles->contains(fn ($rol) => in_array($rol->name, ['Admin', 'Super Admin'], true)))->count();
+    @endphp
+    <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+        <x-stat-card label="Usuarios" icon="users">{{ $totalUsuarios }}</x-stat-card>
+        <x-stat-card label="Activos" icon="check-circle" tone="positive">{{ $activos }}</x-stat-card>
+        <x-stat-card label="Administradores" icon="shield-check" class="col-span-2 sm:col-span-1">{{ $administradores }}</x-stat-card>
     </div>
 
-    <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-        <div class="max-h-[28rem] overflow-y-auto overflow-x-auto">
-            <table class="w-full table-fixed text-[13.5px] text-left min-w-[880px]">
-                <colgroup>
-                    <col class="w-[18%]">
-                    <col class="w-[24%]">
-                    <col class="w-[16%]">
-                    <col class="w-[12%]">
-                    <col class="w-[12%]">
-                    <col class="w-[18%]">
-                </colgroup>
-                <thead>
-                    <tr class="sticky top-0 z-10">
-                        <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Nombre</th>
-                        <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Correo</th>
-                        <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Sucursal</th>
-                        <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Rol</th>
-                        <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Estado</th>
-                        <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Acciones</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($this->usuarios as $usuario)
-                        <tr wire:key="usuario-{{ $usuario->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                            <td class="px-4 py-2.5 align-top font-semibold text-zinc-900 dark:text-zinc-100 break-words">{{ $usuario->name }}</td>
-                            <td class="px-4 py-2.5 align-top text-zinc-600 dark:text-zinc-400 break-words">{{ $usuario->email }}</td>
-                            <td class="px-4 py-2.5 align-top text-zinc-600 dark:text-zinc-400 break-words">{{ $usuario->sucursal?->name ?? 'Ninguna' }}</td>
-                            <td class="px-4 py-2.5 align-top text-zinc-600 dark:text-zinc-400 break-words">{{ $usuario->roles->first()?->name }}</td>
-                            <td class="px-4 py-2.5 align-top">
-                                <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold {{ $usuario->activo ? 'bg-positive-soft text-positive' : 'bg-zinc-100 dark:bg-white/10 text-zinc-500' }}">
-                                    {{ $usuario->activo ? 'Activo' : 'Deshabilitado' }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-2.5 align-top">
-                                <div class="flex flex-wrap gap-1.5">
-                                    <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="abrirEditar({{ $usuario->id }})">Editar</flux:button>
-                                    <flux:button
-                                        type="button"
-                                        size="sm"
-                                        variant="ghost"
-                                        :icon="$usuario->activo ? 'no-symbol' : 'check-circle'"
-                                        :disabled="$usuario->id === auth()->id()"
-                                        x-on:click.prevent="
-                                            Swal.fire({
-                                                icon: 'question',
-                                                title: '{{ $usuario->activo ? '¿Deshabilitar este usuario?' : '¿Habilitar este usuario?' }}',
-                                                text: '{{ $usuario->activo ? 'El usuario no podrá iniciar sesión, pero su historial no se verá afectado.' : 'El usuario podrá volver a iniciar sesión.' }}',
-                                                showDenyButton: true,
-                                                confirmButtonText: '{{ $usuario->activo ? 'Deshabilitar' : 'Habilitar' }}',
-                                                denyButtonText: 'Cancelar',
-                                            }).then((result) => {
-                                                if (result.isConfirmed) {
-                                                    $wire.toggleActivo({{ $usuario->id }}).catch((error) => {
-                                                        Swal.fire({
-                                                            icon: 'error',
-                                                            title: 'Error',
-                                                            text: error.message || 'Ocurrió un problema al actualizar el usuario.',
-                                                            showConfirmButton: true,
-                                                        });
-                                                    });
-                                                }
-                                            })
-                                        "
-                                    >
-                                        {{ $usuario->activo ? 'Deshabilitar' : 'Habilitar' }}
-                                    </flux:button>
-                                </div>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="6" class="px-4 text-center text-zinc-400 text-sm py-10">Sin usuarios registrados.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
+    {{-- BÚSQUEDA Y FILTROS --}}
+    <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <flux:input wire:model.live.debounce.250ms="buscar" icon="magnifying-glass" placeholder="Buscar por nombre, correo o sucursal..." class="lg:max-w-sm" />
+
+        <div class="flex flex-wrap items-center gap-2">
+            <flux:select wire:model.live="rolFiltro" size="sm" class="min-w-40">
+                <flux:select.option value="">Todos los roles</flux:select.option>
+                @foreach ($this->roles as $rol)
+                    <flux:select.option value="{{ $rol->name }}">{{ $rol->name }}</flux:select.option>
+                @endforeach
+            </flux:select>
+
+            <flux:radio.group wire:model.live="filtro" variant="segmented" size="sm">
+                <flux:radio value="todos" label="Todos" />
+                <flux:radio value="activos" label="Activos" />
+                <flux:radio value="deshabilitados" label="Deshabilitados" />
+            </flux:radio.group>
         </div>
     </div>
+
+    {{-- USUARIOS --}}
+    @if ($this->visibles->isEmpty())
+        <div class="rounded-2xl border border-dashed border-zinc-300 px-6 py-14 text-center dark:border-zinc-700">
+            <div class="mx-auto flex size-12 items-center justify-center rounded-xl bg-accent-soft text-accent-content">
+                <flux:icon name="users" class="size-6" />
+            </div>
+            <p class="mt-3 font-medium text-zinc-900 dark:text-white">
+                {{ $totalUsuarios === 0 ? 'Aún no hay usuarios registrados' : 'No encontramos usuarios con ese filtro' }}
+            </p>
+            <p class="mt-1 text-sm text-zinc-500">
+                {{ $totalUsuarios === 0 ? 'Agrega el primero con el botón "Agregar usuario".' : 'Prueba con otra búsqueda o cambia los filtros.' }}
+            </p>
+            @if ($totalUsuarios > 0)
+                <flux:button class="mt-4" size="sm" wire:click="limpiarFiltros">Limpiar filtros</flux:button>
+            @endif
+        </div>
+    @else
+        <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+            <div class="max-h-[32rem] overflow-auto">
+                <table class="w-full text-left text-sm md:min-w-[640px]">
+                    <thead>
+                        <tr class="sticky top-0 z-10 border-b border-zinc-200/70 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-700/70 dark:bg-zinc-800">
+                            <th class="px-3 py-3">Usuario</th>
+                            <th class="hidden px-3 py-3 md:table-cell">Sucursal</th>
+                            <th class="hidden px-3 py-3 md:table-cell">Rol</th>
+                            <th class="hidden px-3 py-3 md:table-cell">Estado</th>
+                            <th class="px-3 py-3">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($this->visibles as $usuario)
+                            <tr
+                                wire:key="usuario-{{ $usuario->id }}"
+                                @class([
+                                    'border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-white/5',
+                                    'opacity-70' => ! $usuario->activo,
+                                ])
+                            >
+                                <td class="px-3 py-3">
+                                    <div class="flex items-center gap-3">
+                                        <span class="flex size-9 flex-none items-center justify-center rounded-full bg-accent-soft text-sm font-semibold text-accent-content">
+                                            {{ mb_strtoupper(mb_substr($usuario->name, 0, 1)) }}
+                                        </span>
+                                        <div class="min-w-0">
+                                            <div class="font-semibold text-zinc-900 dark:text-white">{{ $usuario->name }}</div>
+                                            <div class="break-all text-xs text-zinc-500">{{ $usuario->email }}</div>
+                                            <div class="mt-1.5 flex flex-wrap items-center gap-1.5 md:hidden">
+                                                @if ($usuario->roles->isNotEmpty())
+                                                    <span class="inline-flex rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-semibold text-accent-content">{{ $usuario->roles->first()->name }}</span>
+                                                @endif
+                                                <span class="inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold {{ $usuario->activo ? 'bg-positive-soft text-positive' : 'bg-zinc-100 text-zinc-500 dark:bg-white/10' }}">{{ $usuario->activo ? 'Activo' : 'Deshabilitado' }}</span>
+                                                <span class="text-[11px] text-zinc-500">{{ $usuario->sucursal?->name ?? 'Sin sucursal' }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td class="hidden px-3 py-3 text-zinc-600 md:table-cell dark:text-zinc-400">{{ $usuario->sucursal?->name ?? 'Ninguna' }}</td>
+                                <td class="hidden px-3 py-3 md:table-cell">
+                                    @if ($usuario->roles->isNotEmpty())
+                                        <span class="inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-content">{{ $usuario->roles->first()->name }}</span>
+                                    @else
+                                        <span class="text-zinc-400">—</span>
+                                    @endif
+                                </td>
+                                <td class="hidden px-3 py-3 md:table-cell">
+                                    <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold {{ $usuario->activo ? 'bg-positive-soft text-positive' : 'bg-zinc-100 text-zinc-500 dark:bg-white/10' }}">
+                                        {{ $usuario->activo ? 'Activo' : 'Deshabilitado' }}
+                                    </span>
+                                </td>
+                                <td class="px-3 py-3">
+                                    <div class="flex gap-1.5">
+                                        <flux:button size="sm" icon="pencil-square" aria-label="Editar" wire:click="abrirEditar({{ $usuario->id }})"><span class="max-sm:hidden">Editar</span></flux:button>
+                                        <x-usuario-toggle-button :usuario="$usuario" compact />
+                                    </div>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    @endif
 
     <flux:modal wire:model="openCreate" name="crear-usuario" class="max-w-lg">
         <div class="space-y-4">
-            <flux:heading size="lg">Nuevo usuario</flux:heading>
+            <x-modal-header icon="user-plus" title="Nuevo usuario" subtitle="Crea el acceso y asigna su rol." />
             <flux:input wire:model="form.name" label="Nombre" />
             <flux:input type="email" wire:model="form.email" label="Correo" />
 
@@ -312,7 +368,7 @@ new #[Title('Usuarios')] class extends Component {
             </div>
             <flux:input type="text" wire:model="form.password_confirmation" label="Confirmar contraseña" />
 
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openCreate', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="crear">Guardar</flux:button>
             </div>
@@ -321,7 +377,7 @@ new #[Title('Usuarios')] class extends Component {
 
     <flux:modal wire:model="openEdit" name="editar-usuario" class="max-w-lg">
         <div class="space-y-4">
-            <flux:heading size="lg">Editar usuario</flux:heading>
+            <x-modal-header icon="user" title="Editar usuario" subtitle="Actualiza sus datos, rol o contraseña." />
             <flux:input wire:model="form.name" label="Nombre" />
             <flux:input type="email" wire:model="form.email" label="Correo" />
 
@@ -345,7 +401,7 @@ new #[Title('Usuarios')] class extends Component {
             </div>
             <flux:input type="text" wire:model="form.password_confirmation" label="Confirmar contraseña" />
 
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openEdit', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="actualizar">Guardar</flux:button>
             </div>

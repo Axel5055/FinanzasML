@@ -9,15 +9,22 @@ new #[Title('Cuentas')] class extends Component {
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center gap-2">
-        <span class="w-[26px] h-[26px] rounded bg-accent-soft text-accent flex items-center justify-center flex-none">
-            <flux:icon name="ticket" class="w-3.5 h-3.5" />
-        </span>
-        <div>
-            <flux:heading size="lg">Cuentas registradas</flux:heading>
-            <flux:subheading>{{ Auth::user()->hasAnyRole(['Admin', 'Super Admin']) ? 'Todas las sucursales' : (Auth::user()->sucursal->name ?? '') }}</flux:subheading>
-        </div>
-    </div>
+    @php
+        $esAdmin = Auth::user()->hasAnyRole(['Admin', 'Super Admin']);
+        $alcance = $esAdmin ? 'todas las sucursales' : (Auth::user()->sucursal->name ?? 'tu sucursal');
+    @endphp
+    <x-page-header icon="banknotes" title="Cuentas" :subtitle="'Consulta y administra las cuentas registradas de '.$alcance.'.'">
+        <flux:button
+            variant="primary"
+            icon="plus"
+            :href="$esAdmin ? route('admin.registrar.index') : route('capturista.registrar.index')"
+            wire:navigate
+        >
+            Registrar cuenta
+        </flux:button>
+    </x-page-header>
 
-    <livewire:cuenta-table />
+    <div class="rounded-2xl border border-zinc-200/70 bg-white p-3 shadow-sm shadow-zinc-900/5 sm:p-5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+        <livewire:cuenta-table />
+    </div>
 </div>

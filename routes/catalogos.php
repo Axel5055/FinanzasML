@@ -15,6 +15,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->middleware('can:admin.users.index')
         ->name('admin.users.index');
 
+    Route::livewire('admin/auditoria', 'pages::auditoria.index')
+        ->middleware('role:Admin|Super Admin')
+        ->name('admin.auditoria.index');
+
     Route::livewire('admin/configuracion', 'pages::configuracion.index')
         ->middleware('can:admin.configuracion.index')
         ->name('admin.configuracion.index');

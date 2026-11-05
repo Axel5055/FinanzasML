@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Categoria;
 use App\Models\Producto;
 use Flux\Flux;
@@ -21,6 +22,10 @@ new #[Title('Productos')] class extends Component {
     public array $form = ['name' => '', 'categoria_id' => ''];
 
     public array $precios = [];
+
+    public string $buscar = '';
+
+    public string $categoriaFiltro = '';
 
     public function mount(): void
     {
@@ -50,6 +55,24 @@ new #[Title('Productos')] class extends Component {
         return Categoria::orderBy('name')->get();
     }
 
+    #[Computed]
+    public function visibles()
+    {
+        $texto = mb_strtolower(trim($this->buscar));
+
+        return $this->productos
+            ->when($this->categoriaFiltro !== '', fn ($productos) => $productos->where('categoria_id', (int) $this->categoriaFiltro))
+            ->when($texto !== '', fn ($productos) => $productos->filter(
+                fn ($producto) => str_contains(mb_strtolower($producto->name.' '.$producto->categoria?->name), $texto)
+            ))
+            ->values();
+    }
+
+    public function limpiarFiltros(): void
+    {
+        $this->reset(['buscar', 'categoriaFiltro']);
+    }
+
     public function cambiarTab(string $tab): void
     {
         if ($tab === 'productos' && ! $this->canManageCatalogo) {
@@ -68,6 +91,7 @@ new #[Title('Productos')] class extends Component {
         });
 
         unset($this->productos);
+        ActivityLog::log('actualizó los precios maestros de los productos');
         Flux::toast(variant: 'success', text: 'Precios actualizados con éxito.');
     }
 
@@ -88,7 +112,8 @@ new #[Title('Productos')] class extends Component {
             'form.categoria_id' => ['required', 'exists:categorias,id'],
         ]);
 
-        Producto::create($this->form);
+        $producto = Producto::create($this->form);
+        ActivityLog::log("creó el producto \"{$producto->name}\"", $producto);
 
         $this->openCreate = false;
         $this->cargarPrecios();
@@ -119,6 +144,7 @@ new #[Title('Productos')] class extends Component {
         try {
             $producto = Producto::findOrFail($this->editId);
             $producto->update($this->form);
+            ActivityLog::log("editó el producto \"{$producto->name}\"", $producto);
 
             $this->openEdit = false;
             $this->reset(['editId', 'form']);
@@ -150,6 +176,7 @@ new #[Title('Productos')] class extends Component {
             }
 
             $producto->delete();
+            ActivityLog::log("eliminó el producto \"{$producto->name}\"", $producto);
 
             unset($this->productos);
             $this->cargarPrecios();
@@ -162,118 +189,163 @@ new #[Title('Productos')] class extends Component {
 }; ?>
 
 <div class="space-y-6">
-    <div class="flex items-center justify-between gap-4">
-        <div class="flex items-center gap-2">
-            <span class="w-[26px] h-[26px] rounded bg-accent-soft text-accent flex items-center justify-center flex-none">
-                <flux:icon name="cube" class="w-3.5 h-3.5" />
-            </span>
-            <div>
-                <flux:heading size="lg">Productos</flux:heading>
-                <flux:subheading>Catálogo de productos y precios maestros.</flux:subheading>
-            </div>
-        </div>
+    <x-page-header icon="cube" title="Productos" subtitle="Catálogo de productos y precios maestros.">
         @if ($canManageCatalogo && $tab === 'productos')
             <flux:button variant="primary" icon="plus" wire:click="abrirCrear">Agregar producto</flux:button>
         @endif
+    </x-page-header>
+
+    {{-- RESUMEN --}}
+    @php
+        $totalProductos = $this->productos->count();
+        $sinPrecio = $this->productos->whereNull('precio')->count();
+    @endphp
+    <div class="grid grid-cols-3 gap-3 sm:gap-4">
+        <x-stat-card label="Productos" icon="cube">{{ $totalProductos }}</x-stat-card>
+        <x-stat-card label="Categorías" icon="tag">{{ $this->categorias->count() }}</x-stat-card>
+        <x-stat-card label="Sin precio" icon="exclamation-circle" :tone="$sinPrecio > 0 ? 'negative' : 'positive'">{{ $sinPrecio }}</x-stat-card>
     </div>
 
+    {{-- PESTAÑAS --}}
     @if ($canManageCatalogo)
-        <div class="flex gap-2">
-            <flux:button size="sm" :variant="$tab === 'productos' ? 'primary' : 'ghost'" wire:click="cambiarTab('productos')">Productos</flux:button>
-            <flux:button size="sm" :variant="$tab === 'precios' ? 'primary' : 'ghost'" wire:click="cambiarTab('precios')">Precios</flux:button>
+        <div class="inline-flex gap-1 rounded-xl bg-zinc-200/60 p-1 dark:bg-white/10">
+            <button
+                type="button"
+                wire:click="cambiarTab('productos')"
+                @class([
+                    'rounded-lg px-4 py-1.5 text-sm font-medium transition',
+                    'bg-white text-accent-content shadow-sm dark:bg-zinc-900' => $tab === 'productos',
+                    'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white' => $tab !== 'productos',
+                ])
+            >Productos</button>
+            <button
+                type="button"
+                wire:click="cambiarTab('precios')"
+                @class([
+                    'rounded-lg px-4 py-1.5 text-sm font-medium transition',
+                    'bg-white text-accent-content shadow-sm dark:bg-zinc-900' => $tab === 'precios',
+                    'text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white' => $tab !== 'precios',
+                ])
+            >Precios</button>
         </div>
     @endif
 
+    {{-- BÚSQUEDA Y FILTRO --}}
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <flux:input wire:model.live.debounce.250ms="buscar" icon="magnifying-glass" placeholder="Buscar producto o categoría..." class="sm:max-w-sm" />
+
+        <div class="flex items-center gap-2">
+            <flux:select wire:model.live="categoriaFiltro" size="sm" class="min-w-44">
+                <flux:select.option value="">Todas las categorías</flux:select.option>
+                @foreach ($this->categorias as $categoria)
+                    <flux:select.option value="{{ $categoria->id }}">{{ $categoria->name }}</flux:select.option>
+                @endforeach
+            </flux:select>
+        </div>
+    </div>
+
     @if ($canManageCatalogo && $tab === 'productos')
-        <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-            <div class="max-h-[28rem] overflow-y-auto overflow-x-auto">
-                <table class="w-full table-fixed text-[13.5px] text-left min-w-[640px]">
-                    <colgroup>
-                        <col class="w-[38%]">
-                        <col class="w-[32%]">
-                        <col class="w-[30%]">
-                    </colgroup>
+        {{-- PRODUCTOS --}}
+        @if ($this->visibles->isEmpty())
+            <div class="rounded-2xl border border-dashed border-zinc-300 px-6 py-14 text-center dark:border-zinc-700">
+                <div class="mx-auto flex size-12 items-center justify-center rounded-xl bg-accent-soft text-accent-content">
+                    <flux:icon name="cube" class="size-6" />
+                </div>
+                <p class="mt-3 font-medium text-zinc-900 dark:text-white">
+                    {{ $totalProductos === 0 ? 'Aún no hay productos registrados' : 'No encontramos productos con ese filtro' }}
+                </p>
+                <p class="mt-1 text-sm text-zinc-500">
+                    {{ $totalProductos === 0 ? 'Agrega el primero con el botón "Agregar producto".' : 'Prueba con otra búsqueda o cambia la categoría.' }}
+                </p>
+                @if ($totalProductos > 0)
+                    <flux:button class="mt-4" size="sm" wire:click="limpiarFiltros">Limpiar filtros</flux:button>
+                @endif
+            </div>
+        @else
+            <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+                <div class="max-h-[32rem] overflow-auto">
+                    <table class="w-full min-w-[560px] text-left text-sm">
+                        <thead>
+                            <tr class="sticky top-0 z-10 border-b border-zinc-200/70 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-700/70 dark:bg-zinc-800">
+                                <th class="px-4 py-3">Producto</th>
+                                <th class="px-4 py-3">Categoría</th>
+                                <th class="px-4 py-3 text-right">Precio</th>
+                                <th class="px-4 py-3">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($this->visibles as $producto)
+                                <tr wire:key="fila-producto-{{ $producto->id }}" class="border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-white/5">
+                                    <td class="px-4 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <span class="flex size-8 flex-none items-center justify-center rounded-lg bg-accent-soft text-accent-content">
+                                                <flux:icon name="cube" class="size-4" />
+                                            </span>
+                                            <span class="font-semibold text-zinc-900 dark:text-white">{{ $producto->name }}</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        @if ($producto->categoria)
+                                            <span class="inline-flex rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-content">{{ $producto->categoria->name }}</span>
+                                        @else
+                                            <span class="text-zinc-400">—</span>
+                                        @endif
+                                    </td>
+                                    <td class="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums {{ $producto->precio === null ? 'text-zinc-400' : 'text-zinc-900 dark:text-white' }}">
+                                        {{ $producto->precio === null ? 'Sin precio' : '$'.number_format((float) $producto->precio, 2) }}
+                                    </td>
+                                    <td class="px-4 py-3">
+                                        <div class="flex gap-1.5">
+                                            <flux:button size="sm" icon="pencil-square" wire:click="abrirEditar({{ $producto->id }})">Editar</flux:button>
+                                            <x-producto-delete-button :producto="$producto" compact />
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
+    @else
+        {{-- PRECIOS --}}
+        @php
+            $textoPrecios = mb_strtolower(trim($buscar));
+            $categoriaPorProducto = $this->productos->pluck('categoria_id', 'id');
+            $preciosVisibles = collect($precios)->filter(function ($precio) use ($textoPrecios, $categoriaPorProducto) {
+                if ($this->categoriaFiltro !== '' && (int) ($categoriaPorProducto[$precio['id']] ?? 0) !== (int) $this->categoriaFiltro) {
+                    return false;
+                }
+
+                return $textoPrecios === '' || str_contains(mb_strtolower($precio['name']), $textoPrecios);
+            });
+        @endphp
+        <div class="overflow-hidden rounded-2xl border border-zinc-200/70 bg-white shadow-sm shadow-zinc-900/5 dark:border-zinc-700/70 dark:bg-zinc-900 dark:shadow-none">
+            <div class="flex flex-col gap-3 border-b border-zinc-200/70 px-5 py-4 sm:flex-row sm:items-center sm:justify-between dark:border-zinc-700/70">
+                <p class="text-sm text-zinc-600 dark:text-zinc-400">Precio maestro por producto. Se usa al presionar "Aplicar nuevos precios" en el registro de cuenta.</p>
+                <flux:button size="sm" variant="primary" icon="check" wire:click="guardarPrecios">Guardar precios</flux:button>
+            </div>
+            <div class="max-h-[32rem] overflow-auto">
+                <table class="w-full min-w-[420px] text-left text-sm">
                     <thead>
-                        <tr class="sticky top-0 z-10">
-                            <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Producto</th>
-                            <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Categoría</th>
-                            <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Acciones</th>
+                        <tr class="sticky top-0 z-10 border-b border-zinc-200/70 bg-zinc-50 text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:border-zinc-700/70 dark:bg-zinc-800">
+                            <th class="px-5 py-3">Producto</th>
+                            <th class="w-48 px-5 py-3">Precio</th>
                         </tr>
                     </thead>
                     <tbody>
-                        @forelse ($this->productos as $producto)
-                            <tr wire:key="producto-{{ $producto->id }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                <td class="px-4 py-2.5 align-top font-semibold text-zinc-900 dark:text-zinc-100 break-words">{{ $producto->name }}</td>
-                                <td class="px-4 py-2.5 align-top text-zinc-600 dark:text-zinc-400 break-words">{{ $producto->categoria?->name }}</td>
-                                <td class="px-4 py-2.5 align-top">
-                                    <div class="flex flex-wrap gap-1.5">
-                                        <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="abrirEditar({{ $producto->id }})">Editar</flux:button>
-                                        <flux:button
-                                            type="button"
-                                            size="sm"
-                                            variant="ghost"
-                                            icon="trash"
-                                            x-on:click.prevent="
-                                                Swal.fire({
-                                                    icon: 'question',
-                                                    title: '¿Estás seguro de eliminar el producto?',
-                                                    text: 'Una vez eliminado no se podrá recuperar.',
-                                                    showDenyButton: true,
-                                                    confirmButtonText: 'Eliminar',
-                                                    denyButtonText: 'No eliminar',
-                                                }).then((result) => {
-                                                    if (result.isConfirmed) {
-                                                        $wire.eliminar({{ $producto->id }}).catch((error) => {
-                                                            Swal.fire({
-                                                                icon: 'error',
-                                                                title: 'Error al eliminar',
-                                                                text: error.message || 'Ocurrió un problema al intentar eliminar el producto.',
-                                                                showConfirmButton: true,
-                                                            });
-                                                        });
-                                                    }
-                                                })
-                                            "
-                                        >Eliminar</flux:button>
-                                    </div>
+                        @forelse ($preciosVisibles as $index => $precio)
+                            <tr wire:key="precio-{{ $precio['id'] }}" class="border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-white/5">
+                                <td class="px-5 py-2.5 font-semibold text-zinc-900 dark:text-white">{{ $precio['name'] }}</td>
+                                <td class="px-5 py-2">
+                                    <flux:input size="sm" type="number" step="0.001" icon="currency-dollar" wire:model="precios.{{ $index }}.precio" />
                                 </td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="px-4 text-center text-zinc-400 text-sm py-10">Sin productos registrados.</td>
+                                <td colspan="2" class="px-5 py-10 text-center text-sm text-zinc-400">No encontramos productos con ese filtro.</td>
                             </tr>
                         @endforelse
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    @else
-        <div class="rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 overflow-hidden">
-            <div class="flex items-center justify-between gap-4 px-4 py-3 border-b border-zinc-200 dark:border-zinc-700">
-                <flux:subheading>Precio maestro por producto (se usa al presionar "Aplicar nuevos precios" en el registro de cuenta).</flux:subheading>
-                <flux:button size="sm" variant="primary" icon="check" wire:click="guardarPrecios">Guardar precios</flux:button>
-            </div>
-            <div class="max-h-[28rem] overflow-y-auto overflow-x-auto">
-                <table class="w-full table-fixed text-[13.5px] text-left min-w-[420px]">
-                    <colgroup>
-                        <col class="w-[65%]">
-                        <col class="w-[35%]">
-                    </colgroup>
-                    <thead>
-                        <tr class="sticky top-0 z-10">
-                            <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Producto</th>
-                            <th class="text-[10.5px] font-bold tracking-wider uppercase text-zinc-400 bg-white dark:bg-zinc-800 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-700">Precio</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($precios as $index => $precio)
-                            <tr wire:key="precio-{{ $precio['id'] }}" class="border-b border-zinc-200 dark:border-zinc-700 last:border-b-0 hover:bg-zinc-50 dark:hover:bg-zinc-700/40">
-                                <td class="px-4 py-2 align-top font-semibold text-zinc-900 dark:text-zinc-100 break-words">{{ $precio['name'] }}</td>
-                                <td class="px-4 py-2 align-top">
-                                    <flux:input size="sm" type="number" step="0.001" icon="currency-dollar" wire:model="precios.{{ $index }}.precio" />
-                                </td>
-                            </tr>
-                        @endforeach
                     </tbody>
                 </table>
             </div>
@@ -282,7 +354,7 @@ new #[Title('Productos')] class extends Component {
 
     <flux:modal wire:model="openCreate" name="crear-producto" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">Nuevo producto</flux:heading>
+            <x-modal-header icon="cube" title="Nuevo producto" subtitle="Agrega un producto al catálogo." />
             <flux:input wire:model="form.name" label="Nombre" />
             <flux:select wire:model="form.categoria_id" label="Categoría">
                 <flux:select.option value="">Selecciona una categoría</flux:select.option>
@@ -290,7 +362,7 @@ new #[Title('Productos')] class extends Component {
                     <flux:select.option value="{{ $categoria->id }}">{{ $categoria->name }}</flux:select.option>
                 @endforeach
             </flux:select>
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openCreate', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="crear">Guardar</flux:button>
             </div>
@@ -299,7 +371,7 @@ new #[Title('Productos')] class extends Component {
 
     <flux:modal wire:model="openEdit" name="editar-producto" class="max-w-sm">
         <div class="space-y-4">
-            <flux:heading size="lg">Editar producto</flux:heading>
+            <x-modal-header icon="cube" title="Editar producto" subtitle="Modifica el nombre o la categoría." />
             <flux:input wire:model="form.name" label="Nombre" />
             <flux:select wire:model="form.categoria_id" label="Categoría">
                 <flux:select.option value="">Selecciona una categoría</flux:select.option>
@@ -307,7 +379,7 @@ new #[Title('Productos')] class extends Component {
                     <flux:select.option value="{{ $categoria->id }}">{{ $categoria->name }}</flux:select.option>
                 @endforeach
             </flux:select>
-            <div class="flex justify-end gap-2">
+            <div class="flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
                 <flux:button variant="ghost" wire:click="$set('openEdit', false)">Cancelar</flux:button>
                 <flux:button variant="primary" wire:click="actualizar">Guardar</flux:button>
             </div>
