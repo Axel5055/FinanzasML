@@ -257,3 +257,13 @@ test('la descarga valida el tipo, el formato y las fechas', function () {
         ->get(route('admin.reportes.descargar', ['tipo' => 'ventas', 'desde' => '2026-03-31', 'hasta' => '2026-03-01', 'formato' => 'xls']))
         ->assertSessionHasErrors(['hasta', 'formato']);
 });
+
+test('los pdf de reportes y de cuenta llevan el logo de la empresa', function () {
+    $reporte = app(GenerarReporte::class)->ejecutar('ventas', now()->startOfMonth(), now()->endOfMonth(), null);
+
+    $html = view('reportes.generico', ['reporte' => $reporte])->render();
+
+    expect($html)->toContain('data:image/png;base64,')
+        ->and($html)->toContain('alt="ML Grupo Comercial"')
+        ->and(file_exists(public_path('img/logo-pdf.png')))->toBeTrue();
+});

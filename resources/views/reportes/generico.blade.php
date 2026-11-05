@@ -137,7 +137,15 @@
         ];
     @endphp
 
-    <div class="brand">ML Grupo Comercial</div>
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 10px; border-bottom: 2px solid #6c63e8;">
+        <tr>
+            <td style="padding-bottom: 8px;">@include('reportes._logo', ['alto' => 42])</td>
+            <td style="padding-bottom: 8px; text-align: right; vertical-align: bottom;">
+                <div class="brand">ML Grupo Comercial</div>
+                <div style="font-size: 8.5px; color: #6b7390;">Generado el {{ now()->format('d/m/Y H:i') }}</div>
+            </td>
+        </tr>
+    </table>
     <div class="titulo">{{ $reporte['titulo'] }}</div>
     <div class="sub">{{ $reporte['periodo'] }} · {{ $reporte['sucursal'] }}</div>
 
