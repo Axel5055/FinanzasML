@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Permisos\SeccionesDelAdmin;
 use App\Models\ActivityLog;
 use App\Models\Categoria;
 use App\Models\Cuenta;
@@ -37,16 +38,20 @@ function crearMovimiento(User $usuario, string $descripcion, ?string $subjectTyp
     return $registro;
 }
 
-test('solo admin y super admin pueden entrar a la auditoria', function () {
+test('la auditoria es solo del super admin hasta que se le habilita al rol admin', function () {
     $capturista = User::factory()->create();
     $capturista->assignRole('Capturista');
 
     $this->actingAs($capturista)->get(route('admin.auditoria.index'))->assertForbidden();
-    $this->actingAs($this->admin)->get(route('admin.auditoria.index'))->assertOk()->assertSee('Auditoría');
+    $this->actingAs($this->admin)->get(route('admin.auditoria.index'))->assertForbidden();
 
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('Super Admin');
-    $this->actingAs($superAdmin)->get(route('admin.auditoria.index'))->assertOk();
+    $this->actingAs($superAdmin)->get(route('admin.auditoria.index'))->assertOk()->assertSee('Auditoría');
+
+    app(SeccionesDelAdmin::class)->cambiar('auditoria', true);
+
+    $this->actingAs($this->admin->fresh())->get(route('admin.auditoria.index'))->assertOk();
 });
 
 test('la auditoria lista los movimientos con usuario, modulo y paginacion', function () {

@@ -25,42 +25,52 @@
                         </flux:sidebar.item>
                     @endif
 
-                    @if (auth()->user()->hasAnyRole(['Admin', 'Super Admin']))
+                    @can('admin.registrar.index')
                         <flux:sidebar.item icon="clipboard-document-list" :href="route('admin.registrar.index')" :current="request()->routeIs('admin.registrar.index')" wire:navigate>
                             {{ __('Registrar Cuenta') }}
                         </flux:sidebar.item>
+                    @endcan
+                    @can('admin.cuentas.index')
                         <flux:sidebar.item icon="banknotes" :href="route('admin.cuentas.index')" :current="request()->routeIs('admin.cuentas.*')" wire:navigate>
                             {{ __('Cuentas') }}
                         </flux:sidebar.item>
-                    @endif
+                    @endcan
                 </flux:sidebar.group>
 
-                @if (auth()->user()->hasAnyRole(['Admin', 'Super Admin']))
+                @canany(['admin.sucursales.index', 'admin.productos.index', 'admin.users.index', 'admin.reportes.index', 'admin.auditoria.index', 'admin.configuracion.index'])
                     <flux:sidebar.group :heading="__('Administración')" class="grid">
-                        <flux:sidebar.item icon="building-storefront" :href="route('admin.sucursales.index')" :current="request()->routeIs('admin.sucursales.*')" wire:navigate>
-                            {{ __('Sucursales') }}
-                        </flux:sidebar.item>
-                        <flux:sidebar.item icon="cube" :href="route('admin.productos.index')" :current="request()->routeIs('admin.productos.*')" wire:navigate>
-                            {{ __('Productos') }}
-                        </flux:sidebar.item>
-                        <flux:sidebar.item icon="users" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')" wire:navigate>
-                            {{ __('Usuarios') }}
-                        </flux:sidebar.item>
-
-                        <flux:sidebar.item icon="document-chart-bar" :href="route('admin.reportes.index')" :current="request()->routeIs('admin.reportes.*')" wire:navigate>
-                            {{ __('Reportes') }}
-                        </flux:sidebar.item>
-                        <flux:sidebar.item icon="clipboard-document-check" :href="route('admin.auditoria.index')" :current="request()->routeIs('admin.auditoria.*')" wire:navigate>
-                            {{ __('Auditoría') }}
-                        </flux:sidebar.item>
-
-                        @if (auth()->user()->hasRole('Super Admin'))
+                        @can('admin.sucursales.index')
+                            <flux:sidebar.item icon="building-storefront" :href="route('admin.sucursales.index')" :current="request()->routeIs('admin.sucursales.*')" wire:navigate>
+                                {{ __('Sucursales') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('admin.productos.index')
+                            <flux:sidebar.item icon="cube" :href="route('admin.productos.index')" :current="request()->routeIs('admin.productos.*')" wire:navigate>
+                                {{ __('Productos') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('admin.users.index')
+                            <flux:sidebar.item icon="users" :href="route('admin.users.index')" :current="request()->routeIs('admin.users.*')" wire:navigate>
+                                {{ __('Usuarios') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('admin.reportes.index')
+                            <flux:sidebar.item icon="document-chart-bar" :href="route('admin.reportes.index')" :current="request()->routeIs('admin.reportes.*')" wire:navigate>
+                                {{ __('Reportes') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('admin.auditoria.index')
+                            <flux:sidebar.item icon="clipboard-document-check" :href="route('admin.auditoria.index')" :current="request()->routeIs('admin.auditoria.*')" wire:navigate>
+                                {{ __('Auditoría') }}
+                            </flux:sidebar.item>
+                        @endcan
+                        @can('admin.configuracion.index')
                             <flux:sidebar.item icon="cog-6-tooth" :href="route('admin.configuracion.index')" :current="request()->routeIs('admin.configuracion.*')" wire:navigate>
                                 {{ __('Configuración') }}
                             </flux:sidebar.item>
-                        @endif
+                        @endcan
                     </flux:sidebar.group>
-                @endif
+                @endcanany
             </flux:sidebar.nav>
 
             <flux:spacer />

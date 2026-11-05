@@ -25,10 +25,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('admin.cuentas.pdf');
 
     Route::livewire('admin/reportes', 'pages::reportes.index')
-        ->middleware('role:Admin|Super Admin')
+        ->middleware('can:admin.reportes.index')
         ->name('admin.reportes.index');
 
     Route::get('admin/reportes/descargar', [ReporteController::class, 'exportar'])
-        ->middleware('role:Admin|Super Admin')
+        ->middleware('can:admin.reportes.index')
         ->name('admin.reportes.descargar');
 });

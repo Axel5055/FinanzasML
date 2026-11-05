@@ -44,9 +44,18 @@ test('un admin ve el resumen anual, el top de sucursales y el acceso a registrar
         ->assertOk()
         ->assertSee('Resumen anual')
         ->assertSee('Top sucursales')
-        ->assertSee('Actividad reciente')
+        ->assertDontSee('Actividad reciente')
         ->assertDontSee('Exportar reporte')
         ->assertSee(route('admin.registrar.index'), false);
+});
+
+test('la actividad reciente aparece en el panel solo para quien tiene acceso a la auditoria', function () {
+    $this->seed(RoleSeeder::class);
+
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('Super Admin');
+
+    $this->actingAs($superAdmin)->get(route('dashboard'))->assertOk()->assertSee('Actividad reciente');
 });
 
 test('un capturista ve su resumen sin las secciones de administrador', function () {

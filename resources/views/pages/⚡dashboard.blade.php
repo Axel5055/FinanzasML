@@ -309,7 +309,7 @@ new #[Title('Dashboard')] class extends Component {
     #[Computed]
     public function actividades()
     {
-        if (! $this->isAdmin) {
+        if (! $this->isAdmin || ! auth()->user()->can('admin.auditoria.index')) {
             return null;
         }
 
@@ -623,7 +623,8 @@ new #[Title('Dashboard')] class extends Component {
             </div>
         </x-section-card>
 
-        {{-- ACTIVIDAD --}}
+        {{-- ACTIVIDAD (solo quien tiene acceso a Auditoría) --}}
+        @can('admin.auditoria.index')
         <x-section-card icon="clock" title="Actividad reciente" subtitle="Lo último que hicieron los usuarios en el sistema.">
             <x-slot:actions>
                 <flux:button size="sm" icon-trailing="arrow-right" :href="route('admin.auditoria.index')" wire:navigate>Ver historial completo</flux:button>
@@ -657,5 +658,6 @@ new #[Title('Dashboard')] class extends Component {
                 @endforelse
             </div>
         </x-section-card>
+        @endcan
     @endif
 </div>

@@ -20,6 +20,8 @@ class RoleSeeder extends Seeder
         Permission::create(['name' => 'admin.sucursales.index'])->assignRole($admin);
         Permission::create(['name' => 'admin.productos.index'])->assignRole($admin);
         Permission::create(['name' => 'admin.users.index'])->assignRole($admin);
+        Permission::findOrCreate('admin.reportes.index', 'web')->assignRole($admin);
+        Permission::findOrCreate('admin.auditoria.index', 'web')->assignRole($superAdmin);
         Permission::create(['name' => 'admin.configuracion.index'])->assignRole($superAdmin);
 
         // Super Admin tiene todo lo de Admin, más los permisos exclusivos de arriba.
