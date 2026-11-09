@@ -25,7 +25,7 @@ use Livewire\WithFileUploads;
 new #[Title('Registrar cuenta')] class extends Component {
     use WithFileUploads;
 
-    // Orden de captura de los renglones "Entrada" y "Sobrante" en la hoja impresa (izquierda y luego derecha).
+    // Orden de captura de los renglones "Existencia", "Entrada" y "Sobrante" en la hoja impresa (izquierda y luego derecha).
     // Los productos que no aparecen aquí se muestran después, en orden alfabético.
     private const ORDEN_SOBRANTE = [
         '*PECHUGA', '*PIERNA/MULOS', '*RETAZO', '*HUEVO BLANCO', '*ALA NATURAL', '*H/R', '*PATA',
@@ -492,7 +492,7 @@ new #[Title('Registrar cuenta')] class extends Component {
     }
 
     /**
-     * Índices de $items en el orden de la hoja impresa para los pasos de Entradas y Sobrante.
+     * Índices de $items en el orden de la hoja impresa para los pasos de Existencia, Entradas y Sobrante.
      *
      * @return array<int, int>
      */
@@ -1073,7 +1073,8 @@ new #[Title('Registrar cuenta')] class extends Component {
                                 <flux:table.column>Importe anterior</flux:table.column>
                             </flux:table.columns>
                             <flux:table.rows>
-                                @forelse ($items as $index => $item)
+                                @forelse ($this->indicesSobranteOrdenados as $index)
+                                    @php $item = $items[$index]; @endphp
                                     <flux:table.row
                                         wire:key="item-{{ $item['producto_id'] }}"
                                         data-search="{{ \Illuminate\Support\Str::lower($item['producto']) }}"
