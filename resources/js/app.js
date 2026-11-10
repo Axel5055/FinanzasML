@@ -14,6 +14,8 @@ window.Swal = Swal.mixin({
     },
 });
 
+import './borrador-cuenta';
+
 import 'flatpickr/dist/flatpickr.css';
 
 import './../../vendor/power-components/livewire-powergrid/dist/powergrid';

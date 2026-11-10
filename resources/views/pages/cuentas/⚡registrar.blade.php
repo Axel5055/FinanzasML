@@ -254,12 +254,7 @@ new #[Title('Registrar cuenta')] class extends Component {
             return;
         }
 
-        $haEjecutadoHoy = Execution::where('function_name', 'presentar')
-            ->where('user_id', Auth::id())
-            ->whereDate('last_executed_at', Carbon::today())
-            ->exists();
-
-        if ($haEjecutadoHoy) {
+        if ($this->yaRegistroHoy()) {
             Flux::toast(variant: 'warning', text: 'Solo se puede hacer un registro por día.');
 
             return;
@@ -267,6 +262,14 @@ new #[Title('Registrar cuenta')] class extends Component {
 
         $this->cargarExistencia();
         $this->buttonsDisabled = false;
+    }
+
+    private function yaRegistroHoy(): bool
+    {
+        return Execution::where('function_name', 'presentar')
+            ->where('user_id', Auth::id())
+            ->whereDate('last_executed_at', Carbon::today())
+            ->exists();
     }
 
     public function aplicarNuevosPrecios(): void
@@ -478,17 +481,155 @@ new #[Title('Registrar cuenta')] class extends Component {
             return;
         }
 
-        $index = (int) $m[1];
+        $this->recalcularRenglon((int) $m[1]);
+        $this->recalcularSumas();
+    }
+
+    private function recalcularRenglon(int $index): void
+    {
         $item = $this->items[$index];
         $precio = (float) $item['precio'];
 
         $this->items[$index]['importe_existencia'] = $this->formatearNumero($precio * (float) $item['cantidad_existencia']);
         $this->items[$index]['importe_entrada'] = $this->formatearNumero($precio * (float) $item['cantidad_entrada']);
         $this->items[$index]['importe_sobrante'] = $this->formatearNumero($precio * (float) $item['cantidad_sobrante']);
+    }
 
+    private function recalcularSumas(): void
+    {
         $this->sumExistencia = collect($this->items)->sum('importe_existencia');
         $this->sumEntrada = collect($this->items)->sum('importe_entrada');
         $this->sumSobrante = collect($this->items)->sum('importe_sobrante');
+    }
+
+    private function recalcularTodo(): void
+    {
+        foreach (array_keys($this->items) as $index) {
+            $this->recalcularRenglon($index);
+        }
+
+        $this->recalcularSumas();
+        $this->recalcularSalidas();
+    }
+
+    /**
+     * Se llama desde el navegador al volver la conexión: lo capturado sin internet llega en esta misma
+     * petición y aquí se recalculan todos los importes (el hook updated() solo recalcula un renglón).
+     */
+    public function recuperarConexion(): void
+    {
+        $this->recalcularTodo();
+
+        Flux::toast(variant: 'success', text: 'Conexión restablecida. Tu captura está al día.');
+    }
+
+    /**
+     * Retoma un borrador guardado en el navegador. El arreglo viene del cliente, así que se valida y
+     * sanea todo antes de usarlo; la sucursal de un capturista siempre es la suya.
+     *
+     * @param  array<string, mixed>  $borrador
+     */
+    public function restaurarBorrador(array $borrador): bool
+    {
+        if ($this->cuentaEditandoId === null) {
+            $sucursalId = $this->esAdmin ? (int) ($borrador['sucursalId'] ?? 0) : (int) Auth::user()->sucursal_id;
+            $fechaVenta = $this->fechaValida($borrador['fechaVenta'] ?? null);
+
+            $sucursalValida = $this->esAdmin
+                ? Sucursal::activas()->whereKey($sucursalId)->exists()
+                : $sucursalId > 0;
+
+            if (! $sucursalValida || $fechaVenta === null) {
+                Flux::toast(variant: 'warning', text: 'El borrador ya no es válido y se descartó.');
+
+                return false;
+            }
+
+            if (! $this->esAdmin && $this->yaRegistroHoy()) {
+                Flux::toast(variant: 'warning', text: 'Solo se puede hacer un registro por día.');
+
+                return false;
+            }
+
+            $this->sucursalId = $sucursalId;
+            $this->fechaVenta = $fechaVenta;
+            $this->cargarExistencia();
+            $this->buttonsDisabled = false;
+        }
+
+        $guardados = collect($borrador['items'] ?? [])
+            ->filter(fn ($renglon) => is_array($renglon))
+            ->keyBy(fn ($renglon) => (int) ($renglon['producto_id'] ?? 0));
+
+        foreach ($this->items as $index => $item) {
+            $guardado = $guardados->get($item['producto_id']);
+
+            if ($guardado === null) {
+                continue;
+            }
+
+            foreach (['precio', 'cantidad_entrada', 'cantidad_sobrante'] as $campo) {
+                if (array_key_exists($campo, $guardado)) {
+                    $this->items[$index][$campo] = $this->numeroSeguro($guardado[$campo]);
+                }
+            }
+        }
+
+        $this->gastos = $this->renglonesSeguros($borrador['gastos'] ?? []);
+        $this->mermas = $this->renglonesSeguros($borrador['mermas'] ?? []);
+        $this->efectivoEntregado = $this->numeroSeguro($borrador['efectivoEntregado'] ?? 0);
+        $this->tarjeta = $this->numeroSeguro($borrador['tarjeta'] ?? 0);
+
+        $this->step = max(1, min(7, (int) ($borrador['step'] ?? 1)));
+        $this->maxStepReached = max($this->step, $this->maxStepReached, min(7, (int) ($borrador['maxStepReached'] ?? 1)));
+
+        $this->recalcularTodo();
+
+        Flux::toast(variant: 'success', text: 'Borrador recuperado. Continúa donde te quedaste.');
+
+        return true;
+    }
+
+    private function fechaValida(mixed $fecha): ?string
+    {
+        if (! is_string($fecha)) {
+            return null;
+        }
+
+        try {
+            $parseada = Carbon::createFromFormat('!Y-m-d', $fecha);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $parseada && $parseada->format('Y-m-d') === $fecha ? $fecha : null;
+    }
+
+    private function numeroSeguro(mixed $valor): float
+    {
+        if (! is_numeric($valor)) {
+            return 0.0;
+        }
+
+        return round(max(-999999999.0, min(999999999.0, (float) $valor)), 3);
+    }
+
+    /**
+     * @return array<int, array{concepto: string, precio: float}>
+     */
+    private function renglonesSeguros(mixed $renglones): array
+    {
+        $limpios = collect(is_array($renglones) ? $renglones : [])
+            ->filter(fn ($renglon) => is_array($renglon))
+            ->take(50)
+            ->map(fn (array $renglon) => [
+                'concepto' => mb_substr(trim(is_string($renglon['concepto'] ?? null) ? $renglon['concepto'] : ''), 0, 255),
+                'precio' => $this->numeroSeguro($renglon['precio'] ?? 0),
+            ])
+            ->values()
+            ->all();
+
+        return $limpios === [] ? [['concepto' => '', 'precio' => 0]] : $limpios;
     }
 
     /**
@@ -731,7 +872,7 @@ new #[Title('Registrar cuenta')] class extends Component {
         $this->step = max(1, $this->step - 1);
     }
 
-    public function guardar(): void
+    public function guardar(): bool
     {
         $user = Auth::user();
         $totalVenta = $this->totalVentaCalculado();
@@ -796,7 +937,7 @@ new #[Title('Registrar cuenta')] class extends Component {
             logger()->error('Error al guardar cuenta', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             Flux::toast(variant: 'danger', text: 'Error al guardar la cuenta.');
 
-            return;
+            return false;
         }
 
         if (! $this->esAdmin) {
@@ -818,10 +959,12 @@ new #[Title('Registrar cuenta')] class extends Component {
         if ($this->cuentaEditandoId) {
             $this->redirectRoute('admin.cuentas.show', ['cuenta' => $cuentaGuardada->id], navigate: true);
 
-            return;
+            return true;
         }
 
         $this->redirectRoute($this->esAdmin ? 'admin.registrar.index' : 'capturista.registrar.index', navigate: true);
+
+        return true;
     }
 
     private function actualizarEfectivoPolloYMarinado(): void
@@ -881,9 +1024,95 @@ new #[Title('Registrar cuenta')] class extends Component {
     $sucursalActual = $esAdmin
         ? collect($sucursales)->firstWhere('id', $sucursalId)?->name
         : Auth::user()->sucursal->name ?? null;
+    $nombresSucursal = collect($sucursales)->pluck('name', 'id')->all();
+    if (! $esAdmin && Auth::user()->sucursal_id) {
+        $nombresSucursal[Auth::user()->sucursal_id] = Auth::user()->sucursal->name ?? '';
+    }
 @endphp
 
-<div class="space-y-6">
+<div
+    class="space-y-6"
+    x-data="borradorCuenta({{ Auth::id() }}, @js(url('/up')), @js($nombresSucursal))"
+    x-effect="document.body.classList.toggle('overflow-hidden', bloqueaPantalla)"
+>
+{{-- Aviso de desconexión / sesión expirada: bloquea la captura hasta reconectar. El avance queda en este navegador. --}}
+<div
+    x-show="sinConexion || sesionExpirada"
+    x-cloak
+    class="fixed inset-0 z-[2000] flex items-center justify-center bg-zinc-900/60 p-4 backdrop-blur-sm"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="aviso-conexion-titulo"
+    data-test="aviso-conexion"
+>
+    <div class="w-full max-w-md rounded-2xl border border-zinc-200/70 bg-white p-6 text-center shadow-xl dark:border-zinc-700/70 dark:bg-zinc-900">
+        <div class="mx-auto flex size-12 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-400">
+            <flux:icon name="signal-slash" class="size-6" />
+        </div>
+
+        <h2 id="aviso-conexion-titulo" class="mt-4 text-lg font-semibold tracking-tight text-zinc-900 dark:text-white" x-text="sesionExpirada ? 'Tu sesión expiró' : 'Sin conexión a internet'"></h2>
+
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400" x-show="sinConexion">
+            No pudimos comunicarnos con el servidor. No cierres esta pantalla: en cuanto vuelva la conexión podrás seguir capturando.
+        </p>
+        <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400" x-show="sesionExpirada" x-cloak>
+            Vuelve a iniciar sesión para continuar con la captura.
+        </p>
+
+        <p class="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-positive-soft px-3 py-2 text-xs font-medium text-positive" x-show="guardadoLocal" x-cloak>
+            <flux:icon name="check-circle" class="size-4 flex-none" />
+            Tu avance está guardado en este dispositivo.
+        </p>
+
+        <p class="mt-3 text-xs font-medium text-red-600 dark:text-red-400" x-show="sinConexion && falloReintento" x-cloak>
+            Sigue sin conexión. Revisa tu red o tus datos móviles e inténtalo de nuevo.
+        </p>
+
+        <div class="mt-5">
+            <flux:button x-show="sinConexion" variant="primary" icon="arrow-path" class="w-full" x-on:click="reintentar()" x-bind:disabled="reintentando" data-test="reintentar-conexion">
+                <span x-text="reintentando ? 'Comprobando…' : 'Reintentar'"></span>
+            </flux:button>
+            <flux:button x-show="sesionExpirada" x-cloak variant="primary" icon="arrow-right-end-on-rectangle" class="w-full" x-on:click="recargar()">
+                Iniciar sesión
+            </flux:button>
+        </div>
+    </div>
+</div>
+
+{{-- Borrador encontrado en este navegador (vigencia de 2 días). --}}
+<div
+    x-show="ofrecerBorrador && ! sinConexion && ! sesionExpirada"
+    x-cloak
+    class="fixed inset-0 z-[1900] flex items-center justify-center bg-zinc-900/60 p-4 backdrop-blur-sm"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="borrador-titulo"
+    data-test="oferta-borrador"
+>
+    <div class="w-full max-w-md rounded-2xl border border-zinc-200/70 bg-white p-6 shadow-xl dark:border-zinc-700/70 dark:bg-zinc-900">
+        <div class="flex items-start gap-3">
+            <div class="flex size-10 flex-none items-center justify-center rounded-xl bg-accent-soft text-accent">
+                <flux:icon name="document-text" class="size-5" />
+            </div>
+            <div class="min-w-0">
+                <h2 id="borrador-titulo" class="text-base font-semibold tracking-tight text-zinc-900 dark:text-white">Tienes una cuenta sin terminar</h2>
+                <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+                    Guardamos tu avance <span x-text="antiguedadBorrador"></span>. ¿Quieres retomarlo donde lo dejaste?
+                </p>
+                <p class="mt-2 rounded-lg bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-700 dark:bg-white/5 dark:text-zinc-300" x-text="resumenBorrador"></p>
+                <p class="mt-2 text-[11px] text-zinc-500">Los borradores se conservan 2 días en este dispositivo.</p>
+            </div>
+        </div>
+
+        <div class="mt-5 flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
+            <flux:button variant="ghost" x-on:click="descartar()" x-bind:disabled="restaurando" data-test="descartar-borrador">Descartar</flux:button>
+            <flux:button variant="primary" icon="arrow-uturn-right" x-on:click="retomar()" x-bind:disabled="restaurando" data-test="retomar-borrador">
+                <span x-text="restaurando ? 'Recuperando…' : 'Retomar captura'"></span>
+            </flux:button>
+        </div>
+    </div>
+</div>
+
 <x-page-header icon="clipboard-document-list" title="Registrar cuenta" subtitle="Captura la cuenta diaria de la sucursal paso a paso." />
 
 <div class="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6 items-start">
@@ -1384,7 +1613,9 @@ new #[Title('Registrar cuenta')] class extends Component {
                                         showConfirmButton: false,
                                         didOpen: () => Swal.showLoading(),
                                     });
-                                    $wire.guardar().then(() => Swal.close());
+                                    $wire.guardar()
+                                        .then((guardada) => { if (guardada) { limpiarBorrador(); } Swal.close(); })
+                                        .catch(() => Swal.close());
                                 }
                             })
                         "
