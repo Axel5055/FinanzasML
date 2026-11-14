@@ -35,7 +35,7 @@ return new class extends Migration
                 ->onDelete('cascade')
                 ->onUpdate('cascade');
 
-            $table->date('fecha_venta')->default(now()->format('Y-m-d'));
+            $table->date('fecha_venta');
 
             $table->timestamps();
 

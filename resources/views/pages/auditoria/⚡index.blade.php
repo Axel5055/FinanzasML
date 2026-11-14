@@ -69,8 +69,8 @@ new #[Title('Auditoría')] class extends Component {
             ->when($this->moduloFiltro === 'sesiones', fn (Builder $q) => $q->whereIn('description', self::SESIONES))
             ->when($this->moduloFiltro === 'general', fn (Builder $q) => $q->whereNull('subject_type')->whereNotIn('description', self::SESIONES))
             ->when(isset(self::MODULOS[$this->moduloFiltro]), fn (Builder $q) => $q->where('subject_type', self::MODULOS[$this->moduloFiltro]['clase']))
-            ->when($this->desde !== '', fn (Builder $q) => $q->whereDate('created_at', '>=', $this->desde))
-            ->when($this->hasta !== '', fn (Builder $q) => $q->whereDate('created_at', '<=', $this->hasta))
+            ->when($this->desde !== '', fn (Builder $q) => $q->where('created_at', '>=', \App\Actions\Fechas\DiaDeNegocio::inicioUtc(\Carbon\CarbonImmutable::parse($this->desde, \App\Actions\Fechas\DiaDeNegocio::zona()))))
+            ->when($this->hasta !== '', fn (Builder $q) => $q->where('created_at', '<=', \App\Actions\Fechas\DiaDeNegocio::finUtc(\Carbon\CarbonImmutable::parse($this->hasta, \App\Actions\Fechas\DiaDeNegocio::zona()))))
             ->when($texto !== '', fn (Builder $q) => $q->where(function (Builder $q) use ($texto) {
                 $q->where('description', 'like', "%{$texto}%")
                     ->orWhere('ip_address', 'like', "%{$texto}%")
@@ -100,9 +100,9 @@ new #[Title('Auditoría')] class extends Component {
     {
         return [
             'total' => ActivityLog::count(),
-            'hoy' => ActivityLog::where('created_at', '>=', now()->startOfDay())->count(),
-            'semana' => ActivityLog::where('created_at', '>=', now()->subDays(7)->startOfDay())->count(),
-            'usuariosHoy' => ActivityLog::where('created_at', '>=', now()->startOfDay())->whereNotNull('user_id')->distinct()->count('user_id'),
+            'hoy' => ActivityLog::where('created_at', '>=', \App\Actions\Fechas\DiaDeNegocio::inicioUtc())->count(),
+            'semana' => ActivityLog::where('created_at', '>=', \App\Actions\Fechas\DiaDeNegocio::inicioUtc(\App\Actions\Fechas\DiaDeNegocio::hoy()->subDays(7)))->count(),
+            'usuariosHoy' => ActivityLog::where('created_at', '>=', \App\Actions\Fechas\DiaDeNegocio::inicioUtc())->whereNotNull('user_id')->distinct()->count('user_id'),
         ];
     }
 
@@ -123,7 +123,7 @@ new #[Title('Auditoría')] class extends Component {
 
     public function exportar(): StreamedResponse
     {
-        $nombre = 'auditoria-'.now()->format('Y-m-d_His').'.csv';
+        $nombre = 'auditoria-'.\App\Actions\Fechas\DiaDeNegocio::ahora()->format('Y-m-d_His').'.csv';
 
         return response()->streamDownload(function () {
             $salida = fopen('php://output', 'w');
@@ -133,7 +133,7 @@ new #[Title('Auditoría')] class extends Component {
             $this->consulta()->chunk(500, function ($registros) use ($salida) {
                 foreach ($registros as $registro) {
                     fputcsv($salida, [
-                        $registro->created_at->format('d/m/Y H:i:s'),
+                        $registro->created_at->timezone(\App\Actions\Fechas\DiaDeNegocio::zona())->format('d/m/Y H:i:s'),
                         $registro->user->name ?? 'Usuario eliminado',
                         $registro->user?->roles->first()?->name ?? '',
                         $this->moduloDe($registro),
@@ -232,8 +232,8 @@ new #[Title('Auditoría')] class extends Component {
                             @endphp
                             <tr wire:key="auditoria-{{ $registro->id }}" class="border-b border-zinc-100 align-top last:border-b-0 hover:bg-zinc-50/80 dark:border-zinc-800 dark:hover:bg-white/5">
                                 <td class="whitespace-nowrap px-3 py-3">
-                                    <div class="font-medium tabular-nums text-zinc-900 dark:text-white">{{ $registro->created_at->format('d/m/Y') }}</div>
-                                    <div class="text-xs tabular-nums text-zinc-500">{{ $registro->created_at->format('H:i:s') }} · {{ $registro->created_at->diffForHumans() }}</div>
+                                    <div class="font-medium tabular-nums text-zinc-900 dark:text-white">{{ $registro->created_at->timezone(\App\Actions\Fechas\DiaDeNegocio::zona())->format('d/m/Y') }}</div>
+                                    <div class="text-xs tabular-nums text-zinc-500">{{ $registro->created_at->timezone(\App\Actions\Fechas\DiaDeNegocio::zona())->format('H:i:s') }} · {{ $registro->created_at->diffForHumans() }}</div>
                                 </td>
                                 <td class="px-3 py-3">
                                     <div class="flex items-center gap-2.5">

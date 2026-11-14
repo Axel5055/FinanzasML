@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Fechas\DiaDeNegocio;
 use App\Models\ActivityLog;
+use App\Models\Categoria;
 use App\Models\Configuracion;
 use App\Models\Cuenta;
 use App\Models\Entrada;
@@ -12,12 +14,14 @@ use App\Models\Producto;
 use App\Models\Salida;
 use App\Models\Sucursal;
 use Carbon\Carbon;
+use Domain\Cuentas\Actions\CalcularTotalesCuenta;
 use Domain\Cuentas\Actions\InterpretarFormularioCuentaAction;
 use Domain\Cuentas\Actions\ProcesarItemAction;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 use Livewire\WithFileUploads;
@@ -35,6 +39,7 @@ new #[Title('Registrar cuenta')] class extends Component {
         'NUGGET', 'TENDER', 'PALOMITA DE PECH.', 'HAMBURGUESA DE POLLO', 'TRONCO PROMO',
     ];
 
+    #[Locked]
     public bool $esAdmin = false;
 
     public ?int $sucursalId = null;
@@ -73,12 +78,16 @@ new #[Title('Registrar cuenta')] class extends Component {
         ['concepto' => '', 'precio' => 0],
     ];
 
+    #[Locked]
     public float $sumExistencia = 0;
 
+    #[Locked]
     public float $sumEntrada = 0;
 
+    #[Locked]
     public float $sumSobrante = 0;
 
+    #[Locked]
     public float $totalSalidas = 0;
 
     public $efectivoEntregado = 0;
@@ -99,6 +108,7 @@ new #[Title('Registrar cuenta')] class extends Component {
     public $salidaSucursalDestinoId = null;
 
     // Modo edición: cuando se llega desde "Editar cuenta" en el detalle/listado
+    #[Locked]
     public ?int $cuentaEditandoId = null;
 
     // Llenado semi-automático a partir de fotos del formulario en papel
@@ -111,6 +121,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
     public array $renglonesNoReconocidos = [];
 
+    #[Locked]
     public bool $iaCapturaHabilitada = false;
 
     public function mount(?Cuenta $cuenta = null): void
@@ -119,8 +130,8 @@ new #[Title('Registrar cuenta')] class extends Component {
         $this->sucursalId = $this->esAdmin ? null : Auth::user()->sucursal_id;
         $this->iaCapturaHabilitada = Configuracion::activa(Configuracion::IA_CAPTURA_HABILITADA, default: true);
 
-        $this->fechaVenta = now()->format('Y-m-d');
-        $this->fechaCaptura = now()->format('Y-m-d');
+        $this->fechaVenta = DiaDeNegocio::hoy()->toDateString();
+        $this->fechaCaptura = DiaDeNegocio::hoy()->toDateString();
 
         $this->productos = Producto::orderBy('name')->get();
         $this->sucursales = Sucursal::activas()
@@ -233,8 +244,58 @@ new #[Title('Registrar cuenta')] class extends Component {
         ];
     }
 
+    /**
+     * Solo un administrador puede elegir la sucursal; la de un capturista siempre es la suya.
+     */
+    public function updatingSucursalId(): void
+    {
+        abort_unless($this->esAdmin, 403);
+    }
+
+    /**
+     * Fuerza la sucursal del capturista desde el usuario autenticado (nunca desde el navegador).
+     */
+    private function fijarSucursalDelCapturista(): void
+    {
+        if (! $this->esAdmin) {
+            $this->sucursalId = Auth::user()->sucursal_id;
+        }
+    }
+
+    /**
+     * @return string|null mensaje de error si la fecha de venta no se puede usar
+     */
+    private function errorFechaVenta(): ?string
+    {
+        $fecha = $this->fechaValida($this->fechaVenta);
+
+        if ($fecha === null) {
+            return 'La fecha de venta no es válida.';
+        }
+
+        $hoy = DiaDeNegocio::hoy();
+
+        if (Carbon::parse($fecha)->gt($hoy)) {
+            return 'La fecha de venta no puede ser futura.';
+        }
+
+        if (! $this->esAdmin && Carbon::parse($fecha)->lt($hoy->subDays(3))) {
+            return 'Solo puedes capturar cuentas de los últimos 3 días.';
+        }
+
+        return null;
+    }
+
     public function presentar(): void
     {
+        $this->fijarSucursalDelCapturista();
+
+        if ($mensaje = $this->errorFechaVenta()) {
+            Flux::toast(variant: 'danger', text: $mensaje);
+
+            return;
+        }
+
         if ($this->esAdmin) {
             if (empty($this->sucursalId)) {
                 Flux::toast(variant: 'danger', text: 'Selecciona una sucursal.');
@@ -268,7 +329,7 @@ new #[Title('Registrar cuenta')] class extends Component {
     {
         return Execution::where('function_name', 'presentar')
             ->where('user_id', Auth::id())
-            ->whereDate('last_executed_at', Carbon::today())
+            ->whereBetween('last_executed_at', [DiaDeNegocio::inicioUtc(), DiaDeNegocio::finUtc()])
             ->exists();
     }
 
@@ -340,7 +401,9 @@ new #[Title('Registrar cuenta')] class extends Component {
             $this->aplicarDatosDetectados($datos);
         } catch (\Throwable $e) {
             logger()->error('Error al interpretar foto de cuenta', ['error' => $e->getMessage()]);
-            Flux::toast(variant: 'danger', text: 'No se pudo procesar la foto: '.$e->getMessage());
+            // Solo los avisos propios (RuntimeException) se muestran tal cual; los errores técnicos o de red no.
+            $motivo = $e instanceof \RuntimeException ? $e->getMessage() : 'El servicio de IA no respondió correctamente. Inténtalo de nuevo.';
+            Flux::toast(variant: 'danger', text: 'No se pudo procesar la foto: '.$motivo);
 
             return;
         } finally {
@@ -696,6 +759,14 @@ new #[Title('Registrar cuenta')] class extends Component {
             'salidaSucursalDestinoId' => ['required', 'exists:sucursales,id'],
         ]);
 
+        $this->fijarSucursalDelCapturista();
+
+        if ($mensaje = $this->errorFechaVenta()) {
+            Flux::toast(variant: 'danger', text: $mensaje);
+
+            return;
+        }
+
         try {
             DB::transaction(function () {
                 $total = $this->salidaCantidad * $this->salidaPrecio;
@@ -753,6 +824,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Salida registrada.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al guardar la salida.');
         }
     }
@@ -776,6 +848,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Salida eliminada.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'No se puede eliminar: está asociada a otros registros.');
         }
     }
@@ -872,15 +945,178 @@ new #[Title('Registrar cuenta')] class extends Component {
         $this->step = max(1, $this->step - 1);
     }
 
+    /**
+     * Valida en el servidor todo lo que llega del navegador antes de guardar la cuenta.
+     *
+     * @return string|null mensaje de error, o null si la captura es válida
+     */
+    private function errorDeCaptura(): ?string
+    {
+        $user = Auth::user();
+
+        if ($this->esAdmin ? ! $user->can('admin.registrar.index') : ! $user->hasRole('Capturista')) {
+            abort(403);
+        }
+
+        if ($this->buttonsDisabled || $this->items === []) {
+            return 'Presenta la existencia antes de guardar la cuenta.';
+        }
+
+        if (empty($this->sucursalId) || ! Sucursal::whereKey($this->sucursalId)->exists()) {
+            return 'Selecciona una sucursal válida.';
+        }
+
+        if ($mensaje = $this->errorFechaVenta()) {
+            return $mensaje;
+        }
+
+        $catalogo = Producto::pluck('name', 'id');
+        $vistos = [];
+
+        foreach ($this->items as $item) {
+            $productoId = (int) ($item['producto_id'] ?? 0);
+
+            if (! $catalogo->has($productoId) || isset($vistos[$productoId])) {
+                return 'La captura tiene productos no válidos o repetidos. Recarga la página.';
+            }
+
+            $vistos[$productoId] = true;
+
+            foreach (['precio', 'cantidad_existencia', 'cantidad_entrada', 'cantidad_sobrante'] as $campo) {
+                if (! $this->esNumeroNoNegativo($item[$campo] ?? 0)) {
+                    return "Hay un valor no válido en \"{$catalogo[$productoId]}\" (".str_replace('_', ' ', $campo).').';
+                }
+            }
+        }
+
+        foreach ([[$this->gastos, 'gastos'], [$this->mermas, 'mermas']] as [$renglones, $nombre]) {
+            foreach ($renglones as $renglon) {
+                if (! is_array($renglon) || ! $this->esNumeroNoNegativo($renglon['precio'] ?? 0) || mb_strlen((string) ($renglon['concepto'] ?? '')) > 255) {
+                    return "Revisa los importes y conceptos de {$nombre}.";
+                }
+            }
+        }
+
+        if (! $this->esNumeroNoNegativo($this->efectivoEntregado) || ! $this->esNumeroNoNegativo($this->tarjeta)) {
+            return 'El efectivo entregado y la tarjeta deben ser montos válidos.';
+        }
+
+        if (! $this->esAdmin) {
+            if (empty(Auth::user()->sucursal_id)) {
+                return 'Tu usuario no tiene una sucursal asignada.';
+            }
+
+            if ($this->yaRegistroHoy()) {
+                return 'Solo se puede hacer un registro por día.';
+            }
+
+            $yaCapturada = Cuenta::query()
+                ->where('sucursal_id', $this->sucursalId)
+                ->where('fecha_venta', $this->fechaVenta)
+                ->whereHas('itemsCuenta')
+                ->exists();
+
+            if ($yaCapturada) {
+                return 'Ya existe una cuenta capturada para esa fecha. Pide a un administrador que la edite.';
+            }
+        }
+
+        return null;
+    }
+
+    private function esNumeroNoNegativo(mixed $valor): bool
+    {
+        if ($valor === '' || $valor === null) {
+            return true;
+        }
+
+        $limpio = is_string($valor) ? str_replace(',', '', trim($valor)) : $valor;
+
+        return is_numeric($limpio) && (float) $limpio >= 0 && (float) $limpio <= 999999999;
+    }
+
+    /**
+     * Reconstruye los renglones solo con los campos permitidos, con nombres tomados del catálogo y
+     * números limpios, para que lo que llega del navegador no pueda colar columnas ni importes ajenos.
+     */
+    private function normalizarItems(): void
+    {
+        $productos = Producto::get(['id', 'name', 'categoria_id'])->keyBy('id');
+        $numero = fn (mixed $valor): float => ($valor === '' || $valor === null) ? 0.0 : round((float) str_replace(',', '', (string) $valor), 3);
+
+        $this->items = collect($this->items)->map(fn (array $item) => [
+            'producto_id' => (int) $item['producto_id'],
+            'producto' => $productos[(int) $item['producto_id']]->name,
+            'categoria_id' => $productos[(int) $item['producto_id']]->categoria_id,
+            'precio' => $numero($item['precio'] ?? 0),
+            'cantidad_existencia' => $numero($item['cantidad_existencia'] ?? 0),
+            'importe_existencia' => 0.0,
+            'cantidad_entrada' => $numero($item['cantidad_entrada'] ?? 0),
+            'importe_entrada' => 0.0,
+            'cantidad_salida' => 0.0,
+            'importe_salida' => 0.0,
+            'cantidad_sobrante' => $numero($item['cantidad_sobrante'] ?? 0),
+            'importe_sobrante' => 0.0,
+        ])->values()->all();
+    }
+
+    /**
+     * Suma por concepto los renglones con importe (dos renglones con el mismo concepto cuentan como uno solo).
+     *
+     * @param  array<int, array<string, mixed>>  $renglones
+     * @return array<string, float>
+     */
+    private function renglonesAgrupados(array $renglones): array
+    {
+        return collect($renglones)
+            ->filter(fn ($renglon) => ! empty($renglon['precio']) && ! empty($renglon['concepto']))
+            ->groupBy(fn ($renglon) => trim((string) $renglon['concepto']))
+            ->map(fn ($grupo) => round($grupo->sum(fn ($renglon) => (float) str_replace(',', '', (string) $renglon['precio'])), 3))
+            ->all();
+    }
+
     public function guardar(): bool
     {
         $user = Auth::user();
-        $totalVenta = $this->totalVentaCalculado();
-        $diferencia = $this->diferenciaCalculada();
+
+        $this->fijarSucursalDelCapturista();
+
+        if ($this->cuentaEditandoId) {
+            $editada = Cuenta::findOrFail($this->cuentaEditandoId);
+            $this->sucursalId = $editada->sucursal_id;
+            $this->fechaVenta = Carbon::parse($editada->fecha_venta)->toDateString();
+        }
+
+        if ($mensaje = $this->errorDeCaptura()) {
+            Flux::toast(variant: 'danger', text: $mensaje);
+
+            return false;
+        }
+
+        // Los importes y totales se recalculan aquí: nada de lo que mande el navegador se toma como cifra final.
+        $this->normalizarItems();
+        $this->recalcularTodo();
+
+        $gastosAgrupados = $this->renglonesAgrupados($this->gastos);
+        $mermasAgrupadas = $this->renglonesAgrupados($this->mermas);
+
+        [
+            'total_venta' => $totalVenta,
+            'diferencia' => $diferencia,
+        ] = (new CalcularTotalesCuenta)(
+            $this->sumExistencia,
+            $this->sumEntrada,
+            $this->sumSobrante,
+            $this->totalSalidas,
+            array_sum($gastosAgrupados),
+            array_sum($mermasAgrupadas),
+            (float) $this->efectivoEntregado,
+            (float) $this->tarjeta,
+        );
         $cuentaGuardada = null;
 
         try {
-            DB::transaction(function () use (&$cuentaGuardada, $totalVenta, $diferencia) {
+            DB::transaction(function () use (&$cuentaGuardada, $totalVenta, $diferencia, $gastosAgrupados, $mermasAgrupadas) {
                 $cuenta = Cuenta::updateOrCreate([
                     'fecha_venta' => $this->fechaVenta,
                     'sucursal_id' => $this->sucursalId,
@@ -905,29 +1141,31 @@ new #[Title('Registrar cuenta')] class extends Component {
                     ], $attributes);
                 });
 
-                collect($this->gastos)->each(function ($gasto) use ($cuenta) {
-                    if (! empty($gasto['precio']) && ! empty($gasto['concepto'])) {
-                        Gasto::updateOrCreate([
-                            'concepto' => $gasto['concepto'],
-                            'sucursal_id' => $this->sucursalId,
-                            'cuenta_id' => $cuenta->id,
-                        ], [
-                            'precio' => $gasto['precio'],
-                        ]);
-                    }
-                });
+                foreach ($gastosAgrupados as $concepto => $precio) {
+                    Gasto::updateOrCreate([
+                        'concepto' => $concepto,
+                        'sucursal_id' => $this->sucursalId,
+                        'cuenta_id' => $cuenta->id,
+                    ], [
+                        'precio' => $precio,
+                    ]);
+                }
 
-                collect($this->mermas)->each(function ($merma) use ($cuenta) {
-                    if (! empty($merma['precio']) && ! empty($merma['concepto'])) {
-                        Merma::updateOrCreate([
-                            'concepto' => $merma['concepto'],
-                            'sucursal_id' => $this->sucursalId,
-                            'cuenta_id' => $cuenta->id,
-                        ], [
-                            'precio' => $merma['precio'],
-                        ]);
-                    }
-                });
+                foreach ($mermasAgrupadas as $concepto => $precio) {
+                    Merma::updateOrCreate([
+                        'concepto' => $concepto,
+                        'sucursal_id' => $this->sucursalId,
+                        'cuenta_id' => $cuenta->id,
+                    ], [
+                        'precio' => $precio,
+                    ]);
+                }
+
+                // Al editar, lo que se quitó en pantalla también se quita de la base.
+                if ($this->cuentaEditandoId) {
+                    Gasto::where('cuenta_id', $cuenta->id)->whereNotIn('concepto', array_keys($gastosAgrupados))->delete();
+                    Merma::where('cuenta_id', $cuenta->id)->whereNotIn('concepto', array_keys($mermasAgrupadas))->delete();
+                }
 
                 $this->actualizarEfectivoPolloYMarinado();
 
@@ -972,7 +1210,7 @@ new #[Title('Registrar cuenta')] class extends Component {
         $importeSobrantePollo = ItemCuenta::query()
             ->whereDate('fecha_venta', $this->fechaVenta)
             ->whereHas('cuenta', fn ($q) => $q->where('sucursal_id', $this->sucursalId))
-            ->whereHas('producto.categoria', fn ($q) => $q->where('id', 1))
+            ->whereHas('producto.categoria', fn ($q) => $q->where('id', Categoria::POLLO))
             ->sum('importe_sobrante');
 
         $efectivoPollo = abs($importeSobrantePollo);
@@ -987,7 +1225,7 @@ new #[Title('Registrar cuenta')] class extends Component {
         $importeSobranteMarinado = ItemCuenta::query()
             ->whereDate('fecha_venta', $this->fechaVenta)
             ->whereHas('cuenta', fn ($q) => $q->where('sucursal_id', $this->sucursalId))
-            ->whereHas('producto.categoria', fn ($q) => $q->where('id', 2))
+            ->whereHas('producto.categoria', fn ($q) => $q->where('id', Categoria::MARINADO))
             ->sum('importe_sobrante');
 
         $efectivoMarinado = abs($importeSobranteMarinado);
@@ -1038,7 +1276,7 @@ new #[Title('Registrar cuenta')] class extends Component {
 {{-- Aviso de desconexión / sesión expirada: bloquea la captura hasta reconectar. El avance queda en este navegador. --}}
 <div
     x-show="sinConexion || sesionExpirada"
-    x-cloak
+    style="display: none;"
     class="fixed inset-0 z-[2000] flex items-center justify-center bg-zinc-900/60 p-4 backdrop-blur-sm"
     role="alertdialog"
     aria-modal="true"
@@ -1081,35 +1319,30 @@ new #[Title('Registrar cuenta')] class extends Component {
 
 {{-- Borrador encontrado en este navegador (vigencia de 2 días). --}}
 <div
-    x-show="ofrecerBorrador && ! sinConexion && ! sesionExpirada"
-    x-cloak
-    class="fixed inset-0 z-[1900] flex items-center justify-center bg-zinc-900/60 p-4 backdrop-blur-sm"
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="borrador-titulo"
+    x-show="ofrecerBorrador"
+    style="display: none;"
+    class="flex flex-col gap-3 rounded-xl border border-amber-300/70 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between dark:border-amber-500/40 dark:bg-amber-500/10"
+    role="status"
+    aria-live="polite"
     data-test="oferta-borrador"
 >
-    <div class="w-full max-w-md rounded-2xl border border-zinc-200/70 bg-white p-6 shadow-xl dark:border-zinc-700/70 dark:bg-zinc-900">
-        <div class="flex items-start gap-3">
-            <div class="flex size-10 flex-none items-center justify-center rounded-xl bg-accent-soft text-accent">
-                <flux:icon name="document-text" class="size-5" />
-            </div>
-            <div class="min-w-0">
-                <h2 id="borrador-titulo" class="text-base font-semibold tracking-tight text-zinc-900 dark:text-white">Tienes una cuenta sin terminar</h2>
-                <p class="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-                    Guardamos tu avance <span x-text="antiguedadBorrador"></span>. ¿Quieres retomarlo donde lo dejaste?
-                </p>
-                <p class="mt-2 rounded-lg bg-zinc-50 px-3 py-2 text-xs font-medium text-zinc-700 dark:bg-white/5 dark:text-zinc-300" x-text="resumenBorrador"></p>
-                <p class="mt-2 text-[11px] text-zinc-500">Los borradores se conservan 2 días en este dispositivo.</p>
-            </div>
+    <div class="flex min-w-0 items-start gap-3">
+        <flux:icon name="clock" class="mt-0.5 size-5 flex-none text-amber-600 dark:text-amber-400" />
+        <div class="min-w-0">
+            <p class="text-sm font-semibold text-zinc-900 dark:text-white">Encontramos una cuenta sin terminar</p>
+            <p class="mt-0.5 text-xs text-zinc-600 dark:text-zinc-400">
+                <span x-text="resumenBorrador"></span>
+                <span x-show="resumenBorrador"> · </span>guardado <span x-text="antiguedadBorrador"></span>
+                · Se conserva 2 días en este dispositivo.
+            </p>
         </div>
+    </div>
 
-        <div class="mt-5 flex justify-end gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-            <flux:button variant="ghost" x-on:click="descartar()" x-bind:disabled="restaurando" data-test="descartar-borrador">Descartar</flux:button>
-            <flux:button variant="primary" icon="arrow-uturn-right" x-on:click="retomar()" x-bind:disabled="restaurando" data-test="retomar-borrador">
-                <span x-text="restaurando ? 'Recuperando…' : 'Retomar captura'"></span>
-            </flux:button>
-        </div>
+    <div class="flex flex-none items-center justify-end gap-2">
+        <flux:button variant="ghost" size="sm" x-on:click="descartar()" x-bind:disabled="restaurando" data-test="descartar-borrador">Descartar</flux:button>
+        <flux:button variant="primary" size="sm" icon="arrow-uturn-left" x-on:click="retomar()" x-bind:disabled="restaurando" data-test="retomar-borrador">
+            <span x-text="restaurando ? 'Recuperando…' : 'Continuar con lo último'"></span>
+        </flux:button>
     </div>
 </div>
 

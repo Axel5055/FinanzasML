@@ -142,7 +142,7 @@
             <td style="padding-bottom: 8px;">@include('reportes._logo', ['alto' => 42])</td>
             <td style="padding-bottom: 8px; text-align: right; vertical-align: bottom;">
                 <div class="brand">ML Grupo Comercial</div>
-                <div style="font-size: 8.5px; color: #6b7390;">Generado el {{ now()->format('d/m/Y H:i') }}</div>
+                <div style="font-size: 8.5px; color: #6b7390;">Generado el {{ \App\Actions\Fechas\DiaDeNegocio::ahora()->format('d/m/Y H:i') }}</div>
             </td>
         </tr>
     </table>
@@ -208,7 +208,7 @@
         @endif
     </table>
 
-    <div class="pie">Generado el {{ now()->format('d/m/Y H:i') }} · ML Grupo Comercial</div>
+    <div class="pie">Generado el {{ \App\Actions\Fechas\DiaDeNegocio::ahora()->format('d/m/Y H:i') }} · ML Grupo Comercial</div>
 </body>
 
 </html>

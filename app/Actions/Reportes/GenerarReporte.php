@@ -13,7 +13,6 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Construye los reportes del sistema en una estructura tabular común
@@ -22,7 +21,8 @@ use Illuminate\Support\Facades\DB;
  *
  * @phpstan-type Columna array{clave: string, etiqueta: string, tipo: string, alinear?: string}
  * @phpstan-type Indicador array{etiqueta: string, valor: float|int|string, tipo: string, tono: string, icono: string}
- * @phpstan-type Reporte array{tipo: string, titulo: string, descripcion: string, periodo: string, sucursal: string, resumen: list<Indicador>, columnas: list<Columna>, filas: list<array<string, mixed>>, totales: array<string, float|int|string>}
+ * @phpstan-type Datos array{resumen: list<Indicador>, columnas: list<Columna>, filas: array<int, array<string, mixed>>, totales: array<string, float|int|string>}
+ * @phpstan-type Reporte array{tipo: string, titulo: string, descripcion: string, periodo: string, sucursal: string, resumen: list<Indicador>, columnas: list<Columna>, filas: array<int, array<string, mixed>>, totales: array<string, float|int|string>}
  */
 class GenerarReporte
 {
@@ -86,7 +86,7 @@ class GenerarReporte
             'titulo' => self::TIPOS[$tipo]['titulo'],
             'descripcion' => self::TIPOS[$tipo]['descripcion'],
             'periodo' => 'Del '.$desde->format('d/m/Y').' al '.$hasta->format('d/m/Y'),
-            'sucursal' => $sucursalId ? (Sucursal::find($sucursalId)?->name ?? 'Sucursal') : 'Todas las sucursales',
+            'sucursal' => $sucursalId ? (Sucursal::find($sucursalId)->name ?? 'Sucursal') : 'Todas las sucursales',
             ...$datos,
         ];
     }
@@ -123,7 +123,7 @@ class GenerarReporte
     }
 
     /**
-     * @return array<string, mixed>
+     * @return Datos
      */
     private function ventas(string $inicio, string $fin, ?int $sucursalId): array
     {
@@ -174,7 +174,7 @@ class GenerarReporte
     }
 
     /**
-     * @return array<string, mixed>
+     * @return Datos
      */
     private function sucursales(string $inicio, string $fin, ?int $sucursalId): array
     {
@@ -251,7 +251,7 @@ class GenerarReporte
     }
 
     /**
-     * @return array<string, mixed>
+     * @return Datos
      */
     private function diferencias(string $inicio, string $fin, ?int $sucursalId): array
     {
@@ -303,7 +303,7 @@ class GenerarReporte
     }
 
     /**
-     * @return array<string, mixed>
+     * @return Datos
      */
     private function gastos(string $inicio, string $fin, ?int $sucursalId): array
     {
@@ -348,7 +348,7 @@ class GenerarReporte
     }
 
     /**
-     * @return array<string, mixed>
+     * @return Datos
      */
     private function productos(string $inicio, string $fin, ?int $sucursalId): array
     {
@@ -400,7 +400,7 @@ class GenerarReporte
     }
 
     /**
-     * @return array<string, mixed>
+     * @return Datos
      */
     private function transferencias(string $inicio, string $fin, ?int $sucursalId): array
     {
@@ -412,7 +412,7 @@ class GenerarReporte
             ->when($sucursalId, fn ($q) => $q->where(fn ($q) => $q->where('salidas.sucursal_origen_id', $sucursalId)->orWhere('salidas.sucursal_destino_id', $sucursalId)))
             ->orderBy('salidas.fecha_salida')
             ->orderBy('salidas.id')
-            ->get(['salidas.fecha_salida', 'origen.name as origen', 'destino.name as destino', 'productos.name as producto', 'salidas.cantidad', 'salidas.precio', 'salidas.total']);
+            ->toBase()->get(['salidas.fecha_salida', 'origen.name as origen', 'destino.name as destino', 'productos.name as producto', 'salidas.cantidad', 'salidas.precio', 'salidas.total']);
 
         $total = (float) $transferencias->sum('total');
 
@@ -451,7 +451,10 @@ class GenerarReporte
     /**
      * Suma por sucursal de gastos o mermas cuyas cuentas caen en el periodo.
      *
-     * @param  Builder<Model>  $consulta
+     * @template TModel of Model
+     *
+     * @param  Builder<TModel>  $consulta
+     * @param  'gastos'|'mermas'  $tabla
      * @return Collection<int, float|string>
      */
     private function totalPorSucursal($consulta, string $tabla, string $inicio, string $fin)
@@ -460,7 +463,10 @@ class GenerarReporte
             ->join('cuentas', 'cuentas.id', '=', "{$tabla}.cuenta_id")
             ->whereBetween('cuentas.fecha_venta', [$inicio, $fin])
             ->groupBy("{$tabla}.sucursal_id")
-            ->select(DB::raw("{$tabla}.sucursal_id as sid, SUM({$tabla}.precio) as total"))
+            ->selectRaw(match ($tabla) {
+                'gastos' => 'gastos.sucursal_id as sid, SUM(gastos.precio) as total',
+                'mermas' => 'mermas.sucursal_id as sid, SUM(mermas.precio) as total',
+            })
             ->pluck('total', 'sid');
     }
 
@@ -476,7 +482,7 @@ class GenerarReporte
             ->keys()
             ->first();
 
-        return $ruta ?? '—';
+        return (string) ($ruta ?? '—');
     }
 
     private function nombreStatus(?string $nombre): string

@@ -12,6 +12,11 @@ class Categoria extends Model
     /** @use HasFactory<CategoriaFactory> */
     use HasFactory;
 
+    /** Ids fijos que crea `CategoriasSeeder`; el corte de caja separa el efectivo de pollo y de marinado. */
+    public const POLLO = 1;
+
+    public const MARINADO = 2;
+
     protected $table = 'categorias';
 
     protected $fillable = [

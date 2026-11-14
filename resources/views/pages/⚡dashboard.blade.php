@@ -82,10 +82,10 @@ new #[Title('Dashboard')] class extends Component {
 
     private function loadStats(): void
     {
-        $hoy = now()->toDateString();
-        $inicioSemana = now()->startOfWeek()->toDateString();
-        $inicioMes = now()->startOfMonth()->toDateString();
-        $finMes = now()->endOfMonth()->toDateString();
+        $hoy = \App\Actions\Fechas\DiaDeNegocio::ahora()->toDateString();
+        $inicioSemana = \App\Actions\Fechas\DiaDeNegocio::ahora()->startOfWeek()->toDateString();
+        $inicioMes = \App\Actions\Fechas\DiaDeNegocio::ahora()->startOfMonth()->toDateString();
+        $finMes = \App\Actions\Fechas\DiaDeNegocio::ahora()->endOfMonth()->toDateString();
 
         $this->ventasHoy = $this->scopeSucursal(Cuenta::query())
             ->whereDate('fecha_venta', $hoy)
@@ -218,7 +218,7 @@ new #[Title('Dashboard')] class extends Component {
         $previo = $this->ventasPorSucursalYMes($ids, $anioAnterior);
 
         // Meses con datos: el año en curso llega hasta el mes actual.
-        $limite = $anio === now()->year ? now()->month : ($anio < now()->year ? 12 : 0);
+        $limite = $anio === \App\Actions\Fechas\DiaDeNegocio::ahora()->year ? \App\Actions\Fechas\DiaDeNegocio::ahora()->month : ($anio < \App\Actions\Fechas\DiaDeNegocio::ahora()->year ? 12 : 0);
 
         $totalesMes = array_fill(1, 12, 0.0);
         $series = [];
@@ -324,7 +324,7 @@ new #[Title('Dashboard')] class extends Component {
 <div class="space-y-6">
     {{-- ENCABEZADO --}}
     @php
-        $fechaHoy = \Illuminate\Support\Str::ucfirst(now()->locale('es')->translatedFormat('l, j \d\e F \d\e Y'));
+        $fechaHoy = \Illuminate\Support\Str::ucfirst(\App\Actions\Fechas\DiaDeNegocio::ahora()->locale('es')->translatedFormat('l, j \d\e F \d\e Y'));
         $saludo = 'Hola, '.\Illuminate\Support\Str::of(Auth::user()->name)->before(' ')->lower()->title();
         $resumen = $fechaHoy.' · Resumen de la operación '.($isAdmin ? 'de todas las sucursales' : 'de '.(Auth::user()->sucursal->name ?? 'tu sucursal')).'.';
     @endphp

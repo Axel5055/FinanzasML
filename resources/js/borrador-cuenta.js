@@ -85,7 +85,8 @@ window.borradorCuenta = (usuarioId, urlPing, nombresSucursal = {}) => ({
     },
 
     get bloqueaPantalla() {
-        return this.sinConexion || this.sesionExpirada || this.ofrecerBorrador;
+        // El aviso de borrador es un banner informativo: no bloquea la captura.
+        return this.sinConexion || this.sesionExpirada;
     },
 
     init() {
@@ -142,6 +143,12 @@ window.borradorCuenta = (usuarioId, urlPing, nombresSucursal = {}) => ({
         this.$wire.$watch('buttonsDisabled', (deshabilitado) => {
             if (!deshabilitado) {
                 this.tomarBase();
+
+                // Si la persona empieza una cuenta nueva por su cuenta, el aviso de "retomar" ya no aplica.
+                if (!this.$wire.cuentaEditandoId) {
+                    this.ofrecerBorrador = false;
+                    this.borradorOfrecido = null;
+                }
             }
         });
 

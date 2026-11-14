@@ -7,6 +7,7 @@ use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Password;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
 use Livewire\Component;
@@ -95,6 +96,14 @@ new #[Title('Usuarios')] class extends Component {
         $this->form['password_confirmation'] = $password;
     }
 
+    /**
+     * Solo un Super Admin puede ver, editar o deshabilitar a otro Super Admin.
+     */
+    private function esIntocable(User $usuario): bool
+    {
+        return $usuario->hasRole('Super Admin') && ! Auth::user()->hasRole('Super Admin');
+    }
+
     private function rolesPermitidos(): array
     {
         return $this->roles->pluck('name')->all();
@@ -105,9 +114,9 @@ new #[Title('Usuarios')] class extends Component {
         $this->validate([
             'form.name' => ['required', 'string'],
             'form.email' => ['required', 'email', 'unique:users,email'],
-            'form.sucursal_id' => ['nullable', 'integer'],
+            'form.sucursal_id' => ['nullable', 'integer', 'exists:sucursales,id'],
             'form.rol' => ['required', Rule::in($this->rolesPermitidos())],
-            'form.password' => ['required', 'string', 'min:8', 'confirmed'],
+            'form.password' => ['required', 'string', Password::defaults(), 'confirmed'],
         ]);
 
         try {
@@ -126,6 +135,7 @@ new #[Title('Usuarios')] class extends Component {
             unset($this->usuarios);
             Flux::toast(variant: 'success', text: 'Usuario registrado con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al registrar el usuario.');
         }
     }
@@ -133,6 +143,8 @@ new #[Title('Usuarios')] class extends Component {
     public function abrirEditar(int $userId): void
     {
         $usuario = User::with('roles')->findOrFail($userId);
+
+        abort_if($this->esIntocable($usuario), 403);
 
         $this->editId = $usuario->id;
         $this->form = [
@@ -155,15 +167,17 @@ new #[Title('Usuarios')] class extends Component {
 
     public function actualizar(): void
     {
+        abort_if($this->esIntocable(User::findOrFail($this->editId)), 403);
+
         $reglas = [
             'form.name' => ['required', 'string'],
             'form.email' => ['required', 'email', 'unique:users,email,'.$this->editId],
-            'form.sucursal_id' => ['nullable', 'integer'],
+            'form.sucursal_id' => ['nullable', 'integer', 'exists:sucursales,id'],
             'form.rol' => ['required', Rule::in($this->rolesPermitidos())],
         ];
 
         if (filled($this->form['password'])) {
-            $reglas['form.password'] = ['string', 'min:8', 'confirmed'];
+            $reglas['form.password'] = ['string', Password::defaults(), 'confirmed'];
         }
 
         $this->validate($reglas);
@@ -191,6 +205,7 @@ new #[Title('Usuarios')] class extends Component {
             unset($this->usuarios);
             Flux::toast(variant: 'success', text: 'Usuario actualizado con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al actualizar el usuario.');
         }
     }
@@ -210,6 +225,8 @@ new #[Title('Usuarios')] class extends Component {
 
             return;
         }
+
+        abort_if($this->esIntocable($usuario), 403);
 
         $usuario->update(['activo' => ! $usuario->activo]);
 

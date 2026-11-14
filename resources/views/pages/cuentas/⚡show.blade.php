@@ -11,6 +11,7 @@ use App\Models\Salida;
 use App\Models\StatusCuenta;
 use App\Models\Sucursal;
 use Carbon\Carbon;
+use Domain\Cuentas\Actions\CalcularTotalesCuenta;
 use Flux\Flux;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
@@ -67,7 +68,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
     {
         $this->cuenta = $cuenta;
 
-        $this->recalcularTotales();
+        $this->recalcularTotales(guardar: false);
 
         $this->cuenta->load([
             'itemsCuenta.producto',
@@ -100,36 +101,33 @@ new #[Title('Detalle de cuenta')] class extends Component {
         return Sucursal::orderBy('name')->get();
     }
 
+
     /**
-     * Ver [[fancy-wobbling-frost]]: no se aplica abs() al resultado final para
-     * poder reflejar un faltante de caja real cuando los egresos superan
-     * la existencia + entrada del día.
+     * Misma fórmula que la captura (`CalcularTotalesCuenta`). La existencia y el sobrante salen de los
+     * renglones guardados de esta cuenta, así que editar aquí nunca cambia el criterio con que se capturó.
+     * Sin $guardar solo se calcula la existencia para mostrarla.
      */
-    public function recalcularTotales(): void
+    public function recalcularTotales(bool $guardar = true): void
     {
-        $fechaVentaAnterior = Carbon::parse($this->cuenta->fecha_venta)->subDay()->toDateString();
+        $this->totalExistencia = ItemCuenta::where('cuenta_id', $this->cuenta->id)->sum('importe_existencia');
 
-        $totalExistencia = Cuenta::query()
-            ->where('fecha_venta', $fechaVentaAnterior)
-            ->where('sucursal_id', $this->cuenta->sucursal_id)
-            ->value('sobrante') ?? 0;
+        // Solo consultar la cuenta no debe modificarla: los totales se guardan cuando alguien edita algo.
+        if (! $guardar) {
+            return;
+        }
 
-        $this->totalExistencia = $totalExistencia;
+        $totales = (new CalcularTotalesCuenta)(
+            (float) $this->totalExistencia,
+            (float) ItemCuenta::where('cuenta_id', $this->cuenta->id)->sum('importe_entrada'),
+            (float) ItemCuenta::where('cuenta_id', $this->cuenta->id)->sum('importe_sobrante'),
+            (float) Salida::where('cuenta_id', $this->cuenta->id)->sum('total'),
+            (float) Gasto::where('cuenta_id', $this->cuenta->id)->sum('precio'),
+            (float) Merma::where('cuenta_id', $this->cuenta->id)->sum('precio'),
+            (float) $this->cuenta->efectivo_entregado,
+            (float) $this->cuenta->tarjeta,
+        );
 
-        $totalEntrada = ItemCuenta::where('cuenta_id', $this->cuenta->id)->sum('importe_entrada');
-        $totalSobrante = $this->cuenta->sobrante;
-        $totalSalidas = Salida::where('cuenta_id', $this->cuenta->id)->sum('total');
-        $totalGastos = Gasto::where('cuenta_id', $this->cuenta->id)->sum('precio');
-        $totalMermas = Merma::where('cuenta_id', $this->cuenta->id)->sum('precio');
-        $totalCapturado = (float) $this->cuenta->efectivo_entregado + (float) $this->cuenta->tarjeta;
-
-        $totalVenta = abs($totalExistencia + $totalEntrada) - $totalSobrante - $totalSalidas - $totalGastos - $totalMermas;
-        $diferencia = $totalVenta - $totalCapturado;
-
-        $this->cuenta->update([
-            'total_venta' => $totalVenta,
-            'diferencia' => $diferencia,
-        ]);
+        $this->cuenta->update($totales);
 
         $this->cuenta->refresh();
     }
@@ -169,12 +167,15 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
     public function guardarStatus(): void
     {
+        $this->validate(['statusId' => ['required', 'exists:status_cuentas,id']]);
+
         try {
             $this->cuenta->update(['status_cuenta_id' => $this->statusId]);
             $this->bitacora('cambió el status a "'.($this->cuenta->fresh('status_cuenta')->status_cuenta?->name ?? '—').'"');
             $this->reset(['openStatus', 'statusId']);
             Flux::toast(variant: 'success', text: 'Status actualizado correctamente.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al cambiar status.');
         }
     }
@@ -190,20 +191,26 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
     public function guardarEfectivo(): void
     {
+        $this->validate([
+            'efectivoEntregado' => ['required', 'numeric', 'min:0', 'max:999999999'],
+            'tarjeta' => ['required', 'numeric', 'min:0', 'max:999999999'],
+        ]);
+
         try {
             DB::transaction(function () {
-                $totalVenta = Cuenta::find($this->cuenta->id)->total_venta;
-                $totalCapturado = (float) $this->efectivoEntregado + (float) $this->tarjeta;
                 $this->cuenta->update([
                     'efectivo_entregado' => $this->efectivoEntregado,
                     'tarjeta' => $this->tarjeta,
-                    'diferencia' => $totalVenta - $totalCapturado,
                 ]);
+
+                // Recalcula total y diferencia con lo capturado, sin depender de un total guardado desactualizado.
+                $this->recalcularTotales();
             });
             $this->bitacora('actualizó el efectivo entregado y la tarjeta');
             $this->reset(['openEfectivo', 'efectivoEntregado', 'tarjeta']);
             Flux::toast(variant: 'success', text: 'Efectivo y tarjeta actualizados correctamente.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al cambiar efectivo.');
         }
     }
@@ -341,6 +348,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Salida eliminada con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'No se puede eliminar: está asociada a otros registros.');
         }
     }
@@ -369,6 +377,13 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
     public function guardarGasto(): void
     {
+        $this->validate([
+            'gastoForm.concepto' => ['required', 'string', 'max:255'],
+            'gastoForm.precio' => ['required', 'numeric', 'min:0', 'max:999999999'],
+        ]);
+
+        $this->gastoForm = ['concepto' => $this->gastoForm['concepto'], 'precio' => $this->gastoForm['precio']];
+
         try {
             if ($this->gastoEditId) {
                 $gasto = Gasto::where('cuenta_id', $this->cuenta->id)->findOrFail($this->gastoEditId);
@@ -387,6 +402,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Gasto guardado con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al guardar el gasto.');
         }
     }
@@ -409,6 +425,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Gasto eliminado con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'No se puede eliminar el registro.');
         }
     }
@@ -437,6 +454,13 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
     public function guardarMerma(): void
     {
+        $this->validate([
+            'mermaForm.concepto' => ['required', 'string', 'max:255'],
+            'mermaForm.precio' => ['required', 'numeric', 'min:0', 'max:999999999'],
+        ]);
+
+        $this->mermaForm = ['concepto' => $this->mermaForm['concepto'], 'precio' => $this->mermaForm['precio']];
+
         try {
             if ($this->mermaEditId) {
                 $merma = Merma::where('cuenta_id', $this->cuenta->id)->findOrFail($this->mermaEditId);
@@ -455,6 +479,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Merma guardada con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al guardar la merma.');
         }
     }
@@ -477,6 +502,7 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
             Flux::toast(variant: 'success', text: 'Merma eliminada con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'No se puede eliminar el registro.');
         }
     }
@@ -510,6 +536,13 @@ new #[Title('Detalle de cuenta')] class extends Component {
 
     public function guardarItem(): void
     {
+        $this->validate([
+            'itemForm.productoId' => ['required', 'exists:productos,id'],
+            'itemForm.precio' => ['required', 'numeric', 'min:0', 'max:999999999'],
+            'itemForm.cantidadEntrada' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
+            'itemForm.cantidadSobrante' => ['nullable', 'numeric', 'min:0', 'max:999999999'],
+        ]);
+
         try {
             $precio = (float) $this->itemForm['precio'];
             $cantidadEntrada = (float) $this->itemForm['cantidadEntrada'];

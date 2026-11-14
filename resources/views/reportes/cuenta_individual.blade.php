@@ -160,7 +160,7 @@
         <tr>
             <td style="padding-bottom: 8px;">@include('reportes._logo', ['alto' => 42])</td>
             <td style="padding-bottom: 8px; text-align: right; vertical-align: bottom; font-size: 9px; color: #5C6961;">
-                ML Grupo Comercial<br>Generado el {{ now()->format('d/m/Y H:i') }}
+                ML Grupo Comercial<br>Generado el {{ \App\Actions\Fechas\DiaDeNegocio::ahora()->format('d/m/Y H:i') }}
             </td>
         </tr>
     </table>

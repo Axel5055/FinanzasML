@@ -71,6 +71,11 @@ class ReporteController extends Controller
     {
         return response()->streamDownload(function () use ($reporte) {
             $salida = fopen('php://output', 'w');
+
+            if ($salida === false) {
+                return;
+            }
+
             fwrite($salida, "\xEF\xBB\xBF");
 
             fputcsv($salida, [$reporte['titulo']]);

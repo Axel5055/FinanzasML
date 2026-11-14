@@ -80,7 +80,8 @@ test('el detalle lista los gastos y avisa cuando falta por cobrar', function () 
 
     $cuenta->refresh();
 
-    expect((float) $cuenta->total_venta)->toBe(-150.0);
+    // Consultar el detalle no debe escribir en la cuenta: el total se guarda solo cuando alguien edita.
+    expect((float) $cuenta->total_venta)->toBe(0.0);
 
     $componente->call('abrirGasto', Gasto::first()->id)
         ->assertSet('openGasto', true)

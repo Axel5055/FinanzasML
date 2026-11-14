@@ -67,6 +67,10 @@ return [
 
     'timezone' => 'UTC',
 
+    // Huso del negocio (México): las marcas de tiempo siguen en UTC; este huso solo define cuándo
+    // empieza y termina el "día" para la fecha de venta, "hoy", la semana y el mes.
+    'business_timezone' => env('APP_BUSINESS_TIMEZONE', 'America/Mexico_City'),
+
     // Proxies en los que se confía para X-Forwarded-* (ngrok, balanceadores): '*' o IPs separadas por coma.
     'trusted_proxies' => env('TRUSTED_PROXIES'),
 

@@ -5,12 +5,14 @@ use App\Models\Categoria;
 use App\Models\Producto;
 use Flux\Flux;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Productos')] class extends Component {
     public string $tab = 'productos';
 
+    #[Locked]
     public bool $canManageCatalogo = false;
 
     public bool $openCreate = false;
@@ -33,6 +35,14 @@ new #[Title('Productos')] class extends Component {
         $this->tab = $this->canManageCatalogo ? 'productos' : 'precios';
 
         $this->cargarPrecios();
+    }
+
+    /**
+     * La autorización se consulta siempre al usuario autenticado, nunca a una propiedad del componente.
+     */
+    private function puedeGestionarCatalogo(): bool
+    {
+        return (bool) auth()->user()?->can('admin.productos.index');
     }
 
     private function cargarPrecios(): void
@@ -75,7 +85,7 @@ new #[Title('Productos')] class extends Component {
 
     public function cambiarTab(string $tab): void
     {
-        if ($tab === 'productos' && ! $this->canManageCatalogo) {
+        if ($tab === 'productos' && ! $this->puedeGestionarCatalogo()) {
             return;
         }
 
@@ -84,6 +94,12 @@ new #[Title('Productos')] class extends Component {
 
     public function guardarPrecios(): void
     {
+        $this->validate([
+            'precios' => ['array'],
+            'precios.*.id' => ['required', 'integer', 'exists:productos,id'],
+            'precios.*.precio' => ['nullable', 'numeric', 'min:0', 'max:99999999'],
+        ]);
+
         collect($this->precios)->each(function ($precio) {
             Producto::where('id', $precio['id'])->update([
                 'precio' => $precio['precio'] !== '' && $precio['precio'] !== null ? $precio['precio'] : null,
@@ -97,7 +113,7 @@ new #[Title('Productos')] class extends Component {
 
     public function abrirCrear(): void
     {
-        abort_unless($this->canManageCatalogo, 403);
+        abort_unless($this->puedeGestionarCatalogo(), 403);
 
         $this->form = ['name' => '', 'categoria_id' => ''];
         $this->openCreate = true;
@@ -105,7 +121,7 @@ new #[Title('Productos')] class extends Component {
 
     public function crear(): void
     {
-        abort_unless($this->canManageCatalogo, 403);
+        abort_unless($this->puedeGestionarCatalogo(), 403);
 
         $this->validate([
             'form.name' => ['required', 'string'],
@@ -123,7 +139,7 @@ new #[Title('Productos')] class extends Component {
 
     public function abrirEditar(int $productoId): void
     {
-        abort_unless($this->canManageCatalogo, 403);
+        abort_unless($this->puedeGestionarCatalogo(), 403);
 
         $producto = Producto::findOrFail($productoId);
 
@@ -134,7 +150,7 @@ new #[Title('Productos')] class extends Component {
 
     public function actualizar(): void
     {
-        abort_unless($this->canManageCatalogo, 403);
+        abort_unless($this->puedeGestionarCatalogo(), 403);
 
         $this->validate([
             'form.name' => ['required', 'string'],
@@ -152,13 +168,14 @@ new #[Title('Productos')] class extends Component {
             $this->cargarPrecios();
             Flux::toast(variant: 'success', text: 'Producto actualizado con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al actualizar el producto.');
         }
     }
 
     public function eliminar(int $productoId): void
     {
-        abort_unless($this->canManageCatalogo, 403);
+        abort_unless($this->puedeGestionarCatalogo(), 403);
 
         try {
             $producto = Producto::find($productoId);

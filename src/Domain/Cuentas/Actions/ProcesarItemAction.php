@@ -16,7 +16,16 @@ class ProcesarItemAction
      */
     public function __invoke(array $item): array
     {
-        $attributes = collect($item)->except(['producto', 'categoria_id'])->toArray();
+        // Lista blanca: del arreglo que llega del navegador solo se usan columnas de importes/cantidades y el producto.
+        $attributes = collect($item)->only([
+            'producto_id',
+            'precio',
+            'cantidad_existencia', 'importe_existencia',
+            'cantidad_entrada', 'importe_entrada',
+            'cantidad_salida', 'importe_salida',
+            'cantidad_sobrante', 'importe_sobrante',
+            'cantidad_mayoreo', 'importe_mayoreo',
+        ])->toArray();
 
         foreach ($attributes as $campo => $valor) {
             if ($campo === 'precio' || str_starts_with($campo, 'cantidad_') || str_starts_with($campo, 'importe_')) {

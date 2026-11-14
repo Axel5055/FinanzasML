@@ -30,9 +30,12 @@ class ImportLegacyCuentas extends Command
             return self::FAILURE;
         }
 
+        $opcion = $this->option('connection-database');
+        $base = is_string($opcion) && $opcion !== '' ? $opcion : 'tepetlapa';
+
         config(['database.connections.legacy' => array_merge(
             config('database.connections.mysql'),
-            ['database' => $this->option('connection-database')]
+            ['database' => $base]
         )]);
 
         $legacy = DB::connection('legacy');
@@ -40,7 +43,7 @@ class ImportLegacyCuentas extends Command
         try {
             $legacy->getPdo();
         } catch (\Throwable $e) {
-            $this->error("No se pudo conectar a la base de datos legada '{$this->option('connection-database')}': {$e->getMessage()}");
+            $this->error("No se pudo conectar a la base de datos legada '{$base}': {$e->getMessage()}");
 
             return self::FAILURE;
         }

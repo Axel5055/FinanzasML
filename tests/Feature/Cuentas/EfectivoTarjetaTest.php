@@ -35,6 +35,8 @@ function crearSucursalConCapturista(): array
 }
 
 test('guardar la cuenta calcula la diferencia usando efectivo mas tarjeta', function () {
+    Producto::factory()->create(['categoria_id' => Categoria::factory()->create()->id]);
+
     [$sucursal, $capturista] = crearSucursalConCapturista();
 
     Livewire::actingAs($capturista)

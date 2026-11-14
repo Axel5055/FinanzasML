@@ -243,7 +243,22 @@ test('la pantalla incluye el aviso de desconexion y la oferta de borrador', func
         ->assertSee('data-test="aviso-conexion"', false)
         ->assertSee('data-test="reintentar-conexion"', false)
         ->assertSee('data-test="oferta-borrador"', false)
-        ->assertSee('Los borradores se conservan 2 días');
+        ->assertSee('Encontramos una cuenta sin terminar')
+        ->assertSee('Se conserva 2 días');
+});
+
+test('los dialogos nacen ocultos para no bloquear la pantalla si Alpine falla o el JS esta desactualizado', function () {
+    $sucursal = crearSucursalParaBorrador('NORTE');
+    $capturista = crearCapturistaParaBorrador($sucursal);
+
+    $html = $this->actingAs($capturista)
+        ->get(route('capturista.registrar.index'))
+        ->assertOk()
+        ->getContent();
+
+    foreach (['aviso-conexion', 'oferta-borrador'] as $dialogo) {
+        expect($html)->toMatch('/<div\s[^>]*style="display: none;"[^>]*data-test="'.$dialogo.'"/s');
+    }
 });
 
 test('el borrador local caduca a los 2 dias', function () {

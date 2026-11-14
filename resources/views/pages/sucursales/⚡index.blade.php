@@ -71,7 +71,7 @@ new #[Title('Sucursales')] class extends Component {
     public function resumenMes(): array
     {
         return Cuenta::query()
-            ->whereBetween('fecha_venta', [now()->startOfMonth()->toDateString(), now()->endOfMonth()->toDateString()])
+            ->whereBetween('fecha_venta', [\App\Actions\Fechas\DiaDeNegocio::ahora()->startOfMonth()->toDateString(), \App\Actions\Fechas\DiaDeNegocio::ahora()->endOfMonth()->toDateString()])
             ->where('total_venta', '!=', 0)
             ->selectRaw('sucursal_id, SUM(total_venta) as ventas, COUNT(*) as cuentas')
             ->groupBy('sucursal_id')
@@ -104,7 +104,7 @@ new #[Title('Sucursales')] class extends Component {
         return [
             'form.name' => $esCreacion
                 ? ['required', 'string', 'unique:sucursales,name']
-                : ['required', 'string'],
+                : ['required', 'string', 'unique:sucursales,name,'.$this->editId],
             'form.codigo_postal' => ['required', 'string', 'max:5'],
             'form.colonia' => ['nullable', 'string'],
             'form.estado' => ['nullable', 'string'],
@@ -146,6 +146,7 @@ new #[Title('Sucursales')] class extends Component {
             $this->openCreate = false;
             Flux::toast(variant: 'success', text: 'Sucursal registrada con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al registrar la sucursal.');
         }
     }
@@ -191,6 +192,7 @@ new #[Title('Sucursales')] class extends Component {
             $this->reset(['editId', 'form']);
             Flux::toast(variant: 'success', text: 'Sucursal actualizada con éxito.');
         } catch (\Throwable $e) {
+            logger()->error(__METHOD__, ['error' => $e->getMessage()]);
             Flux::toast(variant: 'danger', text: 'Error al actualizar la sucursal.');
         }
     }

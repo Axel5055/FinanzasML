@@ -48,7 +48,7 @@ new #[Title('Reportes')] class extends Component {
 
     private function aplicarPeriodo(): void
     {
-        $hoy = now();
+        $hoy = \App\Actions\Fechas\DiaDeNegocio::ahora();
 
         [$desde, $hasta] = match ($this->periodo) {
             'hoy' => [$hoy->copy(), $hoy->copy()],
@@ -81,8 +81,8 @@ new #[Title('Reportes')] class extends Component {
             }
         };
 
-        $desde = $parsear($this->desde, now()->startOfMonth());
-        $hasta = $parsear($this->hasta, now());
+        $desde = $parsear($this->desde, \App\Actions\Fechas\DiaDeNegocio::ahora()->startOfMonth());
+        $hasta = $parsear($this->hasta, \App\Actions\Fechas\DiaDeNegocio::ahora());
 
         return $desde->gt($hasta) ? [$hasta, $desde] : [$desde, $hasta];
     }

@@ -11,3 +11,6 @@ parameters:
         - routes/
 
     level: 7
+
+    # Los eventos de Laravel (p. ej. Logout::$user) declaran en PHPDoc tipos más estrictos que la realidad.
+    treatPhpDocTypesAsCertain: false

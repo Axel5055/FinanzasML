@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Fechas\DiaDeNegocio;
 use App\Actions\Reportes\GenerarReporte;
 use App\Models\ActivityLog;
 use App\Models\Categoria;
@@ -186,7 +187,7 @@ test('el reporte de transferencias respeta origen o destino al filtrar sucursal'
 });
 
 test('la pantalla de reportes cambia de tipo y de periodo al instante', function () {
-    cuentaParaReportes($this->norte, now()->toDateString(), 1234);
+    cuentaParaReportes($this->norte, DiaDeNegocio::ahora()->toDateString(), 1234);
 
     $component = Livewire::actingAs($this->admin)
         ->test('pages::reportes.index')
@@ -200,11 +201,11 @@ test('la pantalla de reportes cambia de tipo y de periodo al instante', function
         ->assertSet('tipo', 'sucursales');
 
     $component->set('periodo', 'hoy')
-        ->assertSet('desde', now()->toDateString())
-        ->assertSet('hasta', now()->toDateString());
+        ->assertSet('desde', DiaDeNegocio::ahora()->toDateString())
+        ->assertSet('hasta', DiaDeNegocio::ahora()->toDateString());
 
     $component->set('periodo', 'mes_anterior')
-        ->assertSet('desde', now()->subMonthNoOverflow()->startOfMonth()->toDateString());
+        ->assertSet('desde', DiaDeNegocio::ahora()->subMonthNoOverflow()->startOfMonth()->toDateString());
 
     $component->set('desde', '2020-01-01')->assertSet('periodo', 'personalizado');
     $component->set('sucursalId', (string) $this->sur->id)->assertSee('SUR');
