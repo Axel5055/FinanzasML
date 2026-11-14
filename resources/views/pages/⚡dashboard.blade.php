@@ -151,17 +151,19 @@ new #[Title('Dashboard')] class extends Component {
 
     private function cargarAniosDisponibles(): array
     {
+        // Solo los años distintos (la base los agrupa), en vez de traer todas las fechas de venta.
         $years = Cuenta::query()
-            ->pluck('fecha_venta')
+            ->toBase()
+            ->selectRaw('DISTINCT SUBSTR(fecha_venta, 1, 4) as anio')
+            ->pluck('anio')
+            ->map(fn ($anio) => (int) $anio)
             ->filter()
-            ->map(fn ($f) => (int) Carbon::parse($f)->format('Y'))
-            ->unique()
             ->sortDesc()
             ->values()
             ->all();
 
-        if (! in_array((int) date('Y'), $years, true)) {
-            array_unshift($years, (int) date('Y'));
+        if (! in_array(\App\Actions\Fechas\DiaDeNegocio::ahora()->year, $years, true)) {
+            array_unshift($years, \App\Actions\Fechas\DiaDeNegocio::ahora()->year);
         }
 
         return $years;
