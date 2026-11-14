@@ -82,6 +82,11 @@
             <flux:spacer />
 
             <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
+
+            <div class="mt-1 border-t border-white/10 px-2 pt-3 text-center text-[10px] leading-relaxed text-zinc-500" data-test="sidebar-creditos">
+                <p>© {{ now()->year }} ML Grupo Comercial. Todos los derechos reservados.</p>
+                <p>Diseñado por <span class="font-semibold text-zinc-400">Mycleth</span></p>
+            </div>
         </flux:sidebar>
 
         <!-- Mobile User Menu -->
