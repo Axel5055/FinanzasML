@@ -218,3 +218,47 @@ test('el dia de negocio usa la hora de Mexico y no UTC', function () {
     Livewire::actingAs($this->capturista)->test('pages::cuentas.registrar')
         ->assertSet('fechaVenta', '2026-11-13');
 });
+
+test('guardar actualiza los renglones existentes sin duplicarlos ni borrar lo de mayoreo', function () {
+    $componente = Livewire::actingAs($this->admin)->test('pages::cuentas.registrar')
+        ->set('sucursalId', $this->sucursalA->id)
+        ->call('presentar');
+
+    $items = $componente->get('items');
+    $items[0]['precio'] = 10;
+    $items[0]['cantidad_entrada'] = 2;
+    $componente->set('items', $items)->call('guardar');
+
+    $cuenta = Cuenta::firstOrFail();
+    $cuenta->itemsCuenta()->update(['cantidad_mayoreo' => 7]);
+
+    $componente2 = Livewire::actingAs($this->admin)->test('pages::cuentas.registrar', ['cuenta' => $cuenta]);
+    $items = $componente2->get('items');
+    $items[0]['cantidad_entrada'] = 5;
+    $componente2->set('items', $items)->call('guardar');
+
+    $renglon = $cuenta->itemsCuenta()->where('producto_id', $this->producto->id)->get();
+
+    expect($renglon)->toHaveCount(1)
+        ->and((float) $renglon[0]->cantidad_entrada)->toBe(5.0)
+        ->and((float) $renglon[0]->importe_entrada)->toBe(50.0)
+        ->and((float) $renglon[0]->cantidad_mayoreo)->toBe(7.0);
+});
+
+test('el PDF de un reporte con demasiados registros se rechaza y el CSV sigue disponible', function () {
+    $hoy = DiaDeNegocio::hoy();
+
+    foreach (range(0, 260) as $i) {
+        cuentaVacia($this->sucursalA, $hoy->subDays($i)->toDateString(), ['total_venta' => 100]);
+    }
+
+    $filtros = ['tipo' => 'ventas', 'desde' => $hoy->subDays(300)->toDateString(), 'hasta' => $hoy->toDateString()];
+
+    $this->actingAs($this->admin)->get(route('admin.reportes.descargar', [...$filtros, 'formato' => 'pdf']))->assertStatus(422);
+    $this->actingAs($this->admin)->get(route('admin.reportes.descargar', [...$filtros, 'formato' => 'csv']))->assertOk();
+
+    Livewire::actingAs($this->admin)->test('pages::reportes.index')
+        ->set('desde', $filtros['desde'])
+        ->set('hasta', $filtros['hasta'])
+        ->assertSeeHtml('data-test="aviso-pdf-grande"');
+});

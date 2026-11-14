@@ -181,8 +181,15 @@ new #[Title('Reportes')] class extends Component {
             <p class="text-sm text-zinc-500">
                 {{ $this->reporte['periodo'] }} · {{ $this->reporte['sucursal'] }}
             </p>
-            <div class="flex flex-wrap gap-2">
-                <flux:button size="sm" variant="primary" icon="document-arrow-down" :href="route('admin.reportes.descargar', [...$this->parametrosDescarga(), 'formato' => 'pdf'])">Descargar PDF</flux:button>
+            <div class="flex flex-wrap items-center gap-2">
+                @if (count($this->reporte['filas']) > GenerarReporte::MAX_FILAS_PDF)
+                    <flux:button size="sm" variant="primary" icon="document-arrow-down" disabled data-test="pdf-deshabilitado">Descargar PDF</flux:button>
+                    <p class="basis-full text-xs text-amber-600 sm:basis-auto dark:text-amber-400" data-test="aviso-pdf-grande">
+                        El PDF admite hasta {{ GenerarReporte::MAX_FILAS_PDF }} registros. Acota el periodo o descarga el Excel (CSV).
+                    </p>
+                @else
+                    <flux:button size="sm" variant="primary" icon="document-arrow-down" :href="route('admin.reportes.descargar', [...$this->parametrosDescarga(), 'formato' => 'pdf'])">Descargar PDF</flux:button>
+                @endif
                 <flux:button size="sm" icon="table-cells" :href="route('admin.reportes.descargar', [...$this->parametrosDescarga(), 'formato' => 'csv'])">Descargar Excel (CSV)</flux:button>
             </div>
         </div>
@@ -287,7 +294,7 @@ new #[Title('Reportes')] class extends Component {
 
                 @if ($totalFilas > $limiteFilas)
                     <p class="border-t border-zinc-200/70 px-5 py-3 text-xs text-zinc-500 dark:border-zinc-700/70">
-                        Mostrando los primeros {{ $limiteFilas }} de {{ number_format($totalFilas) }} registros. El PDF y el Excel incluyen todos.
+                        Mostrando los primeros {{ $limiteFilas }} de {{ number_format($totalFilas) }} registros. El Excel (CSV) incluye todos.
                     </p>
                 @endif
             </div>

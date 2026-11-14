@@ -50,6 +50,10 @@ class ReporteController extends Controller
             isset($datos['sucursal_id']) ? (int) $datos['sucursal_id'] : null,
         );
 
+        if ($datos['formato'] === 'pdf' && count($reporte['filas']) > GenerarReporte::MAX_FILAS_PDF) {
+            abort(422, 'El PDF admite hasta '.GenerarReporte::MAX_FILAS_PDF.' registros. Acota el periodo o descarga el Excel (CSV).');
+        }
+
         ActivityLog::log('exportó el reporte "'.$reporte['titulo'].'" ('.mb_strtolower($reporte['periodo']).', '.$reporte['sucursal'].') en '.strtoupper($datos['formato']));
 
         $nombre = 'reporte-'.Str::slug($reporte['titulo']).'_'.$datos['desde'].'_a_'.$datos['hasta'].'.'.$datos['formato'];

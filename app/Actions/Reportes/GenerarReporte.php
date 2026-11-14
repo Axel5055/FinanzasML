@@ -27,6 +27,12 @@ use Illuminate\Support\Collection;
 class GenerarReporte
 {
     /**
+     * Máximo de filas que se arma en PDF: DomPDF consume mucha memoria (≈290 MB con 786 filas) y un
+     * hosting con 128–256 MB fallaría. Con más registros se usa el CSV, que no tiene este límite.
+     */
+    public const MAX_FILAS_PDF = 250;
+
+    /**
      * @var array<string, array{titulo: string, descripcion: string, icono: string}>
      */
     public const TIPOS = [

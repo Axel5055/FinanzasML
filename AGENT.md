@@ -182,6 +182,12 @@ Estado base: 142 tests (140 ok, 2 skipped), Pint limpio, Larastan nivel 7 con 19
 - **L1–L4** Larastan nivel 7 en 0 errores (`treatPhpDocTypesAsCertain: false`), `.env.example` con `APP_DEBUG=false`, el error de la IA ya no muestra detalles técnicos, `/public/build.zip` en `.gitignore`.
 - **Aviso de borrador**: ya no es modal; es un banner ámbar arriba de la pantalla ("Encontramos una cuenta sin terminar … Continuar con lo último / Descartar") que no bloquea la captura y se oculta al presentar una cuenta nueva.
 
+### Rendimiento (auditado 2026-11-14, con 1 051 cuentas y 54 865 renglones)
+- Pantallas: 17–80 ms de servidor y 3–24 consultas; índices correctos. Guardar cuenta: de 163 a **20 consultas** (`ItemCuenta::upsert` sobre el índice único `cuenta_id,producto_id`).
+- **PDF de reportes limitado a `GenerarReporte::MAX_FILAS_PDF` (250 filas)**: DomPDF usaba ≈290 MB con 786 filas. Con más filas el botón PDF se deshabilita (aviso en pantalla) y el controlador responde 422; el CSV no tiene límite.
+- El dashboard saca los años con un `SELECT DISTINCT` en vez de traer todas las fechas.
+- En producción: `php artisan optimize` en cada despliegue, OPcache activo y `APP_DEBUG=false`.
+
 ### Pendiente real
 - **M8** Datos históricos: 69 cuentas con existencia distinta al sobrante del día anterior y 262 con `fecha_captura < fecha_venta`; no se pueden corregir con código, hay que revisarlas con el dueño del negocio.
 - El listado de cuentas (`CuentaTable`) oculta cuentas con `efectivo_pollo` y `efectivo_marinado` en 0 (decisión de diseño original; revisar si debe mostrarlas).

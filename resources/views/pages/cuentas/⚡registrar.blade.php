@@ -1132,14 +1132,25 @@ new #[Title('Registrar cuenta')] class extends Component {
                     'total_venta' => $totalVenta,
                 ]);
 
-                collect($this->items)->each(function ($item) use ($cuenta) {
-                    $attributes = (new ProcesarItemAction)($item);
-                    ItemCuenta::updateOrCreate([
-                        'producto_id' => $attributes['producto_id'],
+                // Un solo INSERT ... ON DUPLICATE KEY UPDATE para todos los productos (índice único cuenta+producto),
+                // en vez de dos consultas por producto. Lo de mayoreo solo se inicializa; no se pisa al actualizar.
+                $renglones = collect($this->items)
+                    ->map(fn ($item) => [
+                        ...(new ProcesarItemAction)($item),
                         'cuenta_id' => $cuenta->id,
                         'fecha_venta' => $this->fechaVenta,
-                    ], $attributes);
-                });
+                        'cantidad_mayoreo' => 0,
+                        'importe_mayoreo' => 0,
+                    ])
+                    ->all();
+
+                ItemCuenta::upsert($renglones, ['cuenta_id', 'producto_id'], [
+                    'precio', 'fecha_venta',
+                    'cantidad_existencia', 'importe_existencia',
+                    'cantidad_entrada', 'importe_entrada',
+                    'cantidad_salida', 'importe_salida',
+                    'cantidad_sobrante', 'importe_sobrante',
+                ]);
 
                 foreach ($gastosAgrupados as $concepto => $precio) {
                     Gasto::updateOrCreate([
