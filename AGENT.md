@@ -108,6 +108,8 @@ npm run build                                    # assets (Node en C:\Program Fi
    (`DB_CONNECTION=sqlite DB_DATABASE=<archivo temporal>` + `migrate` + `db:seed`).
 9. Los diálogos que bloquean pantalla deben **nacer ocultos** (`style="display:none"` + `x-show`), no depender de `x-cloak`.
 10. No instalar/actualizar dependencias sin aprobación. No crear documentación extra salvo petición.
+13. **Commits con explicación.** Todo commit (en `Axel` y en `main`) lleva un título corto y un cuerpo con una breve explicación, en español, de **qué cambió y por qué**; nunca un mensaje vacío o de una sola palabra.
+12. **Rama de trabajo: `Axel`.** Los cambios se hacen sobre la rama `Axel`. **Nunca hacer commit, push ni merge — ni en `Axel` ni en `main` — sin autorización expresa del usuario en ese momento** (una autorización vale solo para esa vez). Sin permiso, dejar los cambios sin commitear y avisarlo.
 11. **Cambios de base de datos = dos caminos.** En la BD **local** se aplican solos (migración + `php artisan migrate`; antes, respaldo si borra o altera datos).
     **En producción NO se corre nada desde aquí:** cada vez que haya una migración o cambio de datos nuevo, **entrega al usuario en el chat el SQL equivalente**
     (compatible con MySQL 5.7, que es la versión de producción), probado antes contra la BD local, incluyendo el `INSERT` en la tabla `migrations` para que

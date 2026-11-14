@@ -33,3 +33,17 @@ test('si el admin no tiene cuentas pero si registrar, registrar aparece suelto e
         ->assertDontSee('Todas las cuentas')
         ->assertSee(route('admin.registrar.index'), false);
 });
+
+test('el menu lateral muestra la version del sistema y los creditos', function () {
+    config(['app.version' => '2.5.1']);
+
+    $usuario = User::factory()->create();
+    $usuario->assignRole('Admin');
+
+    $this->actingAs($usuario)
+        ->get(route('dashboard'))
+        ->assertOk()
+        ->assertSee('Versión 2.5.1')
+        ->assertSee('Todos los derechos reservados')
+        ->assertSee('Mycleth');
+});

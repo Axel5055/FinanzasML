@@ -67,6 +67,9 @@ return [
 
     'timezone' => 'UTC',
 
+    // Versión del sistema que se muestra en el menú lateral. Súbela al publicar cambios (APP_VERSION en .env la reemplaza).
+    'version' => env('APP_VERSION', '1.0.0'),
+
     // Huso del negocio (México): las marcas de tiempo siguen en UTC; este huso solo define cuándo
     // empieza y termina el "día" para la fecha de venta, "hoy", la semana y el mes.
     'business_timezone' => env('APP_BUSINESS_TIMEZONE', 'America/Mexico_City'),
